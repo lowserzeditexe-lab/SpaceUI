@@ -12,10 +12,13 @@ import CodeBlock from "@/components/CodeBlock";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
+// GitHub raw URLs — stable public CDN accessible from Roblox
+const GITHUB_RAW = "https://raw.githubusercontent.com/lowserzeditexe-lab/SpaceUI/main/backend/spaceui";
+
 const latestLoad = () =>
-  `loadstring(game:HttpGet("${BACKEND_URL}/api/spaceui.lua"))()`;
+  `loadstring(game:HttpGet("${GITHUB_RAW}/spaceui.lua"))()`;
 const pinnedLoad = (v) =>
-  `loadstring(game:HttpGet("${BACKEND_URL}/api/spaceui@${v}.lua"))()`;
+  `loadstring(game:HttpGet("${GITHUB_RAW}/spaceui-${v}.lua"))()`;
 
 const features = [
   {

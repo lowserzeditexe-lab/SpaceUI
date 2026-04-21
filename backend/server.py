@@ -32,7 +32,11 @@ SPACEUI_DIR       = ROOT_DIR / "spaceui"
 SPACEUI_LUA_PATH  = SPACEUI_DIR / "spaceui.lua"
 COMPONENTS_PATH   = SPACEUI_DIR / "components.json"
 EXAMPLES_PATH     = SPACEUI_DIR / "examples.json"
+EXAMPLES_DIR      = SPACEUI_DIR / "examples"
 METHODS_PATH      = SPACEUI_DIR / "methods.json"
+
+# GitHub raw base — used to replace the placeholder in legacy code
+GITHUB_RAW = "https://raw.githubusercontent.com/lowserzeditexe-lab/SpaceUI/main/backend/spaceui"
 
 # Frozen versions of the library, served via /api/spaceui@<version>.lua.
 # Add new entries here when cutting a release.
@@ -144,6 +148,11 @@ async def examples():
 @api_router.get("/examples/{example_id}.lua")
 async def example_lua(example_id: str):
     """Serve an individual example as raw Lua for one-liner loadstring installs."""
+    # First try to serve from the dedicated file (mirrors GitHub raw)
+    lua_file = EXAMPLES_DIR / f"{example_id}.lua"
+    if lua_file.exists():
+        return _lua_response_from(lua_file.read_text(encoding="utf-8"))
+    # Fall back to examples.json
     items = _load_json(EXAMPLES_PATH)
     match = next((e for e in items if e.get("id") == example_id), None)
     if not match:

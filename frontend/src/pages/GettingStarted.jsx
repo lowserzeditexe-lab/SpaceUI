@@ -2,11 +2,12 @@ import DocLayout from "@/components/DocLayout";
 import DocSidebar from "@/components/DocSidebar";
 import CodeBlock from "@/components/CodeBlock";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
-const LOADSTRING = `loadstring(game:HttpGet("${BACKEND_URL}/api/spaceui.lua"))()`;
+// GitHub raw URL — stable public CDN accessible from Roblox
+const GITHUB_RAW = "https://raw.githubusercontent.com/lowserzeditexe-lab/SpaceUI/main/backend/spaceui";
+const LOADSTRING = `loadstring(game:HttpGet("${GITHUB_RAW}/spaceui.lua"))()`;
 
 const FIRST_WINDOW = `local SpaceUI = loadstring(game:HttpGet(
-    "${BACKEND_URL}/api/spaceui.lua"
+    "${GITHUB_RAW}/spaceui.lua"
 ))()
 
 local Window = SpaceUI:CreateWindow({

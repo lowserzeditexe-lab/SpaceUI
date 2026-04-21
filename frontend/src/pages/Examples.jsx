@@ -7,6 +7,9 @@ import CodeBlock from "@/components/CodeBlock";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
+// GitHub raw URLs — stable, public, accessible from Roblox
+const GITHUB_EXAMPLES = "https://raw.githubusercontent.com/lowserzeditexe-lab/SpaceUI/main/backend/spaceui/examples";
+
 export default function Examples() {
   const [data, setData] = useState([]);
   const [error, setError] = useState(null);
@@ -204,7 +207,7 @@ function ExampleCard({ ex }) {
           One-liner install
         </p>
         <CodeBlock
-          code={`loadstring(game:HttpGet("${BACKEND_URL}/api/examples/${ex.id}.lua"))()`}
+          code={`loadstring(game:HttpGet("${GITHUB_EXAMPLES}/${ex.id}.lua"))()`}
           testId={`example-${ex.id}-oneliner-block`}
           label={`lua · ${ex.id}.lua`}
         />
