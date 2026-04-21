@@ -1,6 +1,6 @@
 --[[ ═══════════════════════════════════════════════════════════════════════
      Ultimate Toolkit  ·  SpaceUI Edition
-     ESP (boîtes + highlight + HP) · Aimtracking · Fly · Téléport · Positions
+     ESP · Aimtracking · Fly · Téléport · Positions · 💰 Give Money
      UI : SpaceUI — https://github.com/lowserzeditexe-lab/SpaceUI
      Toggle : F5   |   Config sauvegardée automatiquement
      ═══════════════════════════════════════════════════════════════════════ ]]
@@ -316,12 +316,122 @@ local function stopFly()
     if hum then hum.PlatformStand = false end
 end
 
+-- ── Module Money (Bronx Hood — auto-détection) ───────────────────────────────
+
+-- Noms courants de valeurs d'argent dans les leaderstats
+local CASH_NAMES = {
+    "Cash", "Money", "Dollars", "Bucks", "Coins", "Credits",
+    "CashMoney", "Cash Money", "Argent", "Balance", "Wallet",
+}
+
+-- Noms courants de RemoteEvents pour donner de l'argent
+local REMOTE_NAMES = {
+    "GiveCash",  "AddCash",   "AddMoney",   "GiveMoney",
+    "UpdateCash","UpdateMoney","CashUpdate", "MoneyUpdate",
+    "SetCash",   "SetMoney",  "EarnCash",   "EarnMoney",
+    "Earn",      "PlayerCash","PlayerMoney","CashEvent",
+    "MoneyEvent","CashChanged","MoneyChanged","CashAdd",
+    "MoneyAdd",  "Cash",      "Money",
+}
+
+local moneyAmount = 5000
+
+-- Cherche la valeur d'argent dans les leaderstats du joueur
+local function findCashValue()
+    local stats = LP:FindFirstChild("leaderstats")
+    if not stats then return nil, "Pas de leaderstats" end
+    -- Cherche par noms connus
+    for _, name in ipairs(CASH_NAMES) do
+        local v = stats:FindFirstChild(name)
+        if v and (v:IsA("IntValue") or v:IsA("NumberValue")) then
+            return v, name
+        end
+    end
+    -- Fallback : premier IntValue / NumberValue trouvé
+    for _, v in ipairs(stats:GetChildren()) do
+        if v:IsA("IntValue") or v:IsA("NumberValue") then
+            return v, v.Name
+        end
+    end
+    return nil, "Valeur introuvable"
+end
+
+-- Scanne tous les RemoteEvents dans ReplicatedStorage (récursif)
+local function scanAllRemotes()
+    local RS = game:GetService("ReplicatedStorage")
+    local found = {}
+    local function scan(parent, path)
+        for _, obj in ipairs(parent:GetChildren()) do
+            local p = path .. "." .. obj.Name
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                table.insert(found, { name = obj.Name, path = p, obj = obj })
+            end
+            pcall(scan, obj, p)
+        end
+    end
+    scan(RS, "ReplicatedStorage")
+    return found
+end
+
+-- Méthode 1 : modification directe de la leaderstats (côté client)
+local function tryDirectModify(amount)
+    local v, name = findCashValue()
+    if not v then return false, "leaderstats introuvable" end
+    local old = v.Value
+    v.Value = v.Value + amount
+    return true, string.format("%s : %d → %d", name, old, v.Value)
+end
+
+-- Méthode 2 : essaie les RemoteEvents courants avec le montant
+local function tryRemoteEvents(amount)
+    local RS = game:GetService("ReplicatedStorage")
+    local tried = 0
+    local function tryOnParent(parent)
+        for _, obj in ipairs(parent:GetChildren()) do
+            for _, remoteName in ipairs(REMOTE_NAMES) do
+                if obj.Name:lower():find(remoteName:lower(), 1, true) then
+                    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                        tried += 1
+                        pcall(function()
+                            if obj:IsA("RemoteEvent") then
+                                obj:FireServer(amount)
+                                obj:FireServer(amount, amount)   -- variante 2 args
+                            else
+                                obj:InvokeServer(amount)
+                            end
+                        end)
+                    end
+                end
+            end
+            pcall(tryOnParent, obj)
+        end
+    end
+    tryOnParent(RS)
+    return tried, tried > 0
+        and tried .. " remote(s) fired"
+        or  "aucun remote reconnu"
+end
+
+-- Fonction principale : donne de l'argent via toutes les méthodes
+local function giveMoney(amount)
+    local lines = {}
+    local ok1, msg1 = tryDirectModify(amount)
+    table.insert(lines, (ok1 and "✅" or "⚠️") .. " Direct: " .. msg1)
+    local n, ok2, msg2 = tryRemoteEvents(amount)
+    table.insert(lines, (ok2 and "✅" or "⚠️") .. " Remote: " .. msg2)
+    local full = table.concat(lines, "\n")
+    print("=== GIVE MONEY +$" .. amount .. " ===")
+    print(full)
+    print(string.rep("=", 30))
+    return full
+end
+
 -- ══════════════════════════════════════════════════════════════════════════════
 --                           FENÊTRE SPACEUI
 -- ══════════════════════════════════════════════════════════════════════════════
 local Window = SpaceUI:CreateWindow({
     Title        = "⚡ Ultimate Toolkit",
-    SubTitle     = "ESP · Aim · Fly · TP",
+    SubTitle     = "ESP · Aim · Fly · Money",
     Size         = UDim2.fromOffset(420, 520),
     ToggleKey    = Enum.KeyCode.F5,
     ConfigFolder = "UltimateToolkit",
@@ -330,6 +440,7 @@ local Window = SpaceUI:CreateWindow({
 local tabCombat   = Window:AddTab({ Name = "Combat" })
 local tabMovement = Window:AddTab({ Name = "Movement" })
 local tabTeleport = Window:AddTab({ Name = "Teleport" })
+local tabMoney    = Window:AddTab({ Name = "Money" })
 
 -- ── Combat › ESP ──────────────────────────────────────────────────────────────
 local secESP = tabCombat:AddSection("ESP")
@@ -460,6 +571,137 @@ secPlayers:AddButton({
         local opts = getPlayerNames()
         tpDD:SetOptions(opts); followDD:SetOptions(opts)
         SpaceUI:Notify({ Title = "Liste actualisée", Duration = 1 })
+    end,
+})
+
+-- ── Money › Bronx Hood ───────────────────────────────────────────────────────
+local secScan = tabMoney:AddSection("Détection auto")
+
+local scanPara = secScan:AddParagraph({
+    Title   = "Statut",
+    Content = "Lance 'Scanner' pour détecter leaderstats + RemoteEvents du jeu.",
+})
+
+secScan:AddButton({
+    Name = "🔍  Scanner le système d'argent",
+    Callback = function()
+        -- Leaderstats
+        local v, name = findCashValue()
+        local lsMsg = v
+            and ("✅ leaderstats." .. name .. " = $" .. tostring(v.Value))
+            or  ("❌ " .. name)
+
+        -- Remotes
+        local remotes = scanAllRemotes()
+        local remoteMsg
+        if #remotes == 0 then
+            remoteMsg = "❌ Aucun RemoteEvent dans ReplicatedStorage"
+        else
+            local names = {}
+            for _, r in ipairs(remotes) do table.insert(names, r.name) end
+            remoteMsg = "✅ " .. #remotes .. " remote(s) : " .. table.concat(names, ", ")
+        end
+
+        print("=== SCAN MONEY ===")
+        print(lsMsg)
+        print(remoteMsg)
+        for _, r in ipairs(remotes) do
+            print("  [" .. r.obj.ClassName .. "] " .. r.path)
+        end
+        print(string.rep("=", 30))
+
+        scanPara:Set({
+            Title   = "Résultat",
+            Content = lsMsg .. "\n" .. remoteMsg,
+        })
+        SpaceUI:Notify({ Title = "Scan terminé", Content = lsMsg, Duration = 4 })
+    end,
+})
+
+local secGive = tabMoney:AddSection("Give Money — Bronx Hood")
+
+secGive:AddSlider({
+    Name      = "Montant",
+    Min       = 100,
+    Max       = 999999,
+    Default   = 5000,
+    Suffix    = " $",
+    Increment = 100,
+    Flag      = "money_amount",
+    Callback  = function(v) moneyAmount = v end,
+})
+
+secGive:AddButton({
+    Name = "💰  Give Money",
+    Callback = function()
+        local result = giveMoney(moneyAmount)
+        SpaceUI:Notify({
+            Title   = "Give Money",
+            Content = "+" .. moneyAmount .. "$ envoyé\n" .. result:match("^[^\n]+"),
+            Duration = 3,
+        })
+    end,
+})
+
+secGive:AddButton({
+    Name = "💎  Max Cash ($999 999)",
+    Callback = function()
+        local result = giveMoney(999999)
+        SpaceUI:Notify({
+            Title   = "Max Cash",
+            Content = "+999 999$ envoyé\n" .. result:match("^[^\n]+"),
+            Duration = 3,
+        })
+    end,
+})
+
+secGive:AddButton({
+    Name = "🗑️  Reset Cash ($0)",
+    Callback = function()
+        local v = findCashValue()
+        if v then
+            v.Value = 0
+            SpaceUI:Notify({ Title = "Reset Cash", Content = "leaderstats mis à 0", Duration = 2 })
+        else
+            SpaceUI:Notify({ Title = "Erreur", Content = "leaderstats introuvable", Duration = 2 })
+        end
+    end,
+})
+
+local secDebug = tabMoney:AddSection("Debug")
+
+secDebug:AddButton({
+    Name = "🖨️  Print tous les RemoteEvents (console)",
+    Callback = function()
+        local remotes = scanAllRemotes()
+        print("=== ALL REMOTES IN REPLICATEDSTORAGE ===")
+        for _, r in ipairs(remotes) do
+            print("  [" .. r.obj.ClassName .. "] " .. r.path)
+        end
+        print("Total : " .. #remotes)
+        print(string.rep("=", 40))
+        SpaceUI:Notify({
+            Title   = "Debug",
+            Content = #remotes .. " remote(s) printés dans la console",
+            Duration = 3,
+        })
+    end,
+})
+
+secDebug:AddButton({
+    Name = "🖨️  Print tous les leaderstats",
+    Callback = function()
+        local stats = LP:FindFirstChild("leaderstats")
+        print("=== LEADERSTATS ===")
+        if stats then
+            for _, v in ipairs(stats:GetChildren()) do
+                print("  " .. v.Name .. " [" .. v.ClassName .. "] = " .. tostring((v :: any).Value))
+            end
+        else
+            print("  Pas de leaderstats trouvé")
+        end
+        print(string.rep("=", 20))
+        SpaceUI:Notify({ Title = "Leaderstats printées", Duration = 2 })
     end,
 })
 
