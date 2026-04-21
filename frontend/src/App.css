@@ -1,0 +1,29 @@
+/* SpaceUI app-level styles — layout scaffolding only. */
+
+.App {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.page-main {
+    flex: 1;
+}
+
+.container-narrow {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+}
+
+@media (min-width: 768px) {
+    .container-narrow {
+        padding: 0 2rem;
+    }
+}
