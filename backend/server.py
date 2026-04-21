@@ -35,11 +35,20 @@ async def health():
 
 # Load the real Lua library from disk at startup.
 # Kept on the filesystem so it's human-readable and diffable.
-SPACEUI_LUA_PATH = ROOT_DIR / "spaceui" / "spaceui.lua"
+SPACEUI_DIR       = ROOT_DIR / "spaceui"
+SPACEUI_LUA_PATH  = SPACEUI_DIR / "spaceui.lua"
+COMPONENTS_PATH   = SPACEUI_DIR / "components.json"
+EXAMPLES_PATH     = SPACEUI_DIR / "examples.json"
+METHODS_PATH      = SPACEUI_DIR / "methods.json"
 
 
 def _load_lua() -> str:
     return SPACEUI_LUA_PATH.read_text(encoding="utf-8")
+
+
+def _load_json(path: Path):
+    import json
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _lua_response() -> Response:
@@ -63,6 +72,21 @@ async def spaceui_lua():
 async def spaceui_lua_api():
     """Public loadstring endpoint for Roblox HttpGet."""
     return _lua_response()
+
+
+@api_router.get("/components")
+async def components():
+    return _load_json(COMPONENTS_PATH)
+
+
+@api_router.get("/examples")
+async def examples():
+    return _load_json(EXAMPLES_PATH)
+
+
+@api_router.get("/methods")
+async def methods():
+    return _load_json(METHODS_PATH)
 
 
 # Include the router in the main app

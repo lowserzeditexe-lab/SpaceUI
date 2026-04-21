@@ -1,0 +1,247 @@
+[
+  {
+    "id": "spaceui-createwindow",
+    "group": "SpaceUI",
+    "signature": "SpaceUI:CreateWindow(options) -> Window",
+    "description": "Creates a new window and returns a Window object. Multiple windows can coexist; each is independently draggable.",
+    "options": [
+      { "name": "Title", "type": "string", "default": "\"SpaceUI\"", "desc": "Header title." },
+      { "name": "SubTitle", "type": "string", "default": "\"\"", "desc": "Dim subtitle next to the title." },
+      { "name": "Size", "type": "UDim2", "default": "UDim2.fromOffset(520,420)", "desc": "Initial size." },
+      { "name": "ToggleKey", "type": "Enum.KeyCode", "default": "Enum.KeyCode.RightShift", "desc": "Key that toggles window visibility." },
+      { "name": "ConfigFolder", "type": "string", "default": "\"default\"", "desc": "Subfolder under SpaceUI/ for persisted config." }
+    ],
+    "returns": "Window",
+    "example": "local Window = SpaceUI:CreateWindow({\n    Title     = \"My Script\",\n    SubTitle  = \"v1.0\",\n    ToggleKey = Enum.KeyCode.RightShift,\n})"
+  },
+  {
+    "id": "spaceui-notify",
+    "group": "SpaceUI",
+    "signature": "SpaceUI:Notify(options)",
+    "description": "Shows a top-right toast that slides in, waits, and slides out. Stacks with other notifications.",
+    "options": [
+      { "name": "Title", "type": "string", "default": "\"Notification\"", "desc": "Bold title." },
+      { "name": "Content", "type": "string", "default": "\"\"", "desc": "Body text." },
+      { "name": "Duration", "type": "number", "default": "5", "desc": "Seconds before auto-dismiss." }
+    ],
+    "returns": "nil",
+    "example": "SpaceUI:Notify({\n    Title    = \"Loaded\",\n    Content  = \"ready\",\n    Duration = 3,\n})"
+  },
+  {
+    "id": "window-addtab",
+    "group": "Window",
+    "signature": "Window:AddTab(options) -> Tab",
+    "description": "Adds a tab to the window. The first tab is auto-selected.",
+    "options": [
+      { "name": "Name", "type": "string", "default": "—", "desc": "Tab label." },
+      { "name": "Icon", "type": "string", "default": "nil", "desc": "Optional rbxassetid." }
+    ],
+    "returns": "Tab",
+    "example": "local Combat = Window:AddTab({ Name = \"Combat\" })"
+  },
+  {
+    "id": "window-toggle",
+    "group": "Window",
+    "signature": "Window:Toggle()",
+    "description": "Shows or hides the window (same effect as the ToggleKey press).",
+    "options": [],
+    "returns": "nil",
+    "example": "Window:Toggle()"
+  },
+  {
+    "id": "window-destroy",
+    "group": "Window",
+    "signature": "Window:Destroy()",
+    "description": "Disconnects all connections, destroys the ScreenGui, and clears internal tables.",
+    "options": [],
+    "returns": "nil",
+    "example": "Window:Destroy()"
+  },
+  {
+    "id": "window-saveconfig",
+    "group": "Window",
+    "signature": "Window:SaveConfig()",
+    "description": "Writes every component's flag value to SpaceUI/<ConfigFolder>/config.json. Falls back to in-memory storage when the executor has no filesystem.",
+    "options": [],
+    "returns": "nil",
+    "example": "Window:SaveConfig()"
+  },
+  {
+    "id": "window-loadconfig",
+    "group": "Window",
+    "signature": "Window:LoadConfig() -> boolean",
+    "description": "Reads the config JSON and calls :Set on each matching component. Returns true if a config was found.",
+    "options": [],
+    "returns": "boolean — true if loaded, false if no config found",
+    "example": "if Window:LoadConfig() then\n    SpaceUI:Notify({ Title = \"Loaded\" })\nend"
+  },
+  {
+    "id": "window-setautosave",
+    "group": "Window",
+    "signature": "Window:SetAutoSave(enabled)",
+    "description": "When enabled, every component change triggers an implicit SaveConfig after the user Callback fires.",
+    "options": [
+      { "name": "enabled", "type": "boolean", "default": "false", "desc": "Whether to auto-save on change." }
+    ],
+    "returns": "nil",
+    "example": "Window:SetAutoSave(true)"
+  },
+  {
+    "id": "tab-addsection",
+    "group": "Tab",
+    "signature": "Tab:AddSection(name) -> Section",
+    "description": "Adds a titled group with a thin hairline under the title. Components can be attached to the section or to the tab directly.",
+    "options": [
+      { "name": "name", "type": "string", "default": "—", "desc": "Section heading." }
+    ],
+    "returns": "Section",
+    "example": "local ESP = Combat:AddSection(\"ESP\")\nESP:AddToggle({ Name = \"Enable\", Default = false })"
+  },
+  {
+    "id": "tab-addbutton",
+    "group": "Components",
+    "signature": "Tab:AddButton(options) -> Component",
+    "description": "Adds a button row. See the Components page for the full props list.",
+    "options": [
+      { "name": "Name", "type": "string", "default": "—", "desc": "Label." },
+      { "name": "Description", "type": "string", "default": "nil", "desc": "Subtitle." },
+      { "name": "Callback", "type": "function()", "default": "nil", "desc": "Fires on click." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddButton({\n    Name = \"Reset\",\n    Callback = function() print(\"reset\") end,\n})"
+  },
+  {
+    "id": "tab-addtoggle",
+    "group": "Components",
+    "signature": "Tab:AddToggle(options) -> Component",
+    "description": "Adds a boolean toggle. Supports Flag for config persistence.",
+    "options": [
+      { "name": "Name", "type": "string", "default": "—", "desc": "Label." },
+      { "name": "Default", "type": "boolean", "default": "false", "desc": "Initial state." },
+      { "name": "Flag", "type": "string", "default": "nil", "desc": "Config key." },
+      { "name": "Callback", "type": "function(boolean)", "default": "nil", "desc": "Fires on change." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddToggle({\n    Name = \"Enable\", Default = false, Flag = \"enabled\",\n    Callback = function(v) print(v) end,\n})"
+  },
+  {
+    "id": "tab-addslider",
+    "group": "Components",
+    "signature": "Tab:AddSlider(options) -> Component",
+    "description": "Adds a numeric slider snapped to Increment. Suffix appears next to the value.",
+    "options": [
+      { "name": "Min", "type": "number", "default": "0", "desc": "Minimum." },
+      { "name": "Max", "type": "number", "default": "100", "desc": "Maximum." },
+      { "name": "Default", "type": "number", "default": "Min", "desc": "Initial value." },
+      { "name": "Increment", "type": "number", "default": "1", "desc": "Snap step." },
+      { "name": "Suffix", "type": "string", "default": "\"\"", "desc": "Unit label." },
+      { "name": "Callback", "type": "function(number)", "default": "nil", "desc": "Fires on change." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddSlider({\n    Name = \"FOV\", Min = 10, Max = 400, Default = 100,\n    Callback = function(v) print(v) end,\n})"
+  },
+  {
+    "id": "tab-adddropdown",
+    "group": "Components",
+    "signature": "Tab:AddDropdown(options) -> Component",
+    "description": "Single- or multi-select. With Multi=true, Default is a table of names and Callback receives a table.",
+    "options": [
+      { "name": "Options", "type": "{ string }", "default": "{}", "desc": "Option list." },
+      { "name": "Default", "type": "string | { string }", "default": "nil", "desc": "Initial selection." },
+      { "name": "Multi", "type": "boolean", "default": "false", "desc": "Enable multi-select." },
+      { "name": "Callback", "type": "function(string|table)", "default": "nil", "desc": "Fires on selection change." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddDropdown({\n    Name = \"Mode\", Options = { \"A\", \"B\", \"C\" }, Default = \"A\",\n    Callback = function(v) print(v) end,\n})"
+  },
+  {
+    "id": "tab-addinput",
+    "group": "Components",
+    "signature": "Tab:AddInput(options) -> Component",
+    "description": "Text input. Callback fires on FocusLost, not on every keystroke.",
+    "options": [
+      { "name": "Placeholder", "type": "string", "default": "\"\"", "desc": "Placeholder text." },
+      { "name": "Default", "type": "string", "default": "\"\"", "desc": "Initial text." },
+      { "name": "ClearOnFocus", "type": "boolean", "default": "false", "desc": "Clear text on focus." },
+      { "name": "Callback", "type": "function(string)", "default": "nil", "desc": "Fires on FocusLost." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddInput({\n    Name = \"Name\", Placeholder = \"Enter name\",\n    Callback = function(v) print(v) end,\n})"
+  },
+  {
+    "id": "tab-addkeybind",
+    "group": "Components",
+    "signature": "Tab:AddKeybind(options) -> Component",
+    "description": "Click to rebind. Supports Enum.KeyCode and mouse Enum.UserInputType values.",
+    "options": [
+      { "name": "Default", "type": "Enum.KeyCode | Enum.UserInputType", "default": "nil", "desc": "Initial binding." },
+      { "name": "Callback", "type": "function()", "default": "nil", "desc": "Fires when the bound input is pressed." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddKeybind({\n    Name = \"Panic\", Default = Enum.KeyCode.P,\n    Callback = function() print(\"panic\") end,\n})"
+  },
+  {
+    "id": "tab-addcolorpicker",
+    "group": "Components",
+    "signature": "Tab:AddColorPicker(options) -> Component",
+    "description": "HSV colour picker. The chrome is monochrome; only the SV field and hue bar render colour.",
+    "options": [
+      { "name": "Default", "type": "Color3", "default": "Color3.new(1,1,1)", "desc": "Initial colour." },
+      { "name": "Callback", "type": "function(Color3)", "default": "nil", "desc": "Fires on colour change." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddColorPicker({\n    Name = \"Color\", Default = Color3.new(1,1,1),\n    Callback = function(c) print(c) end,\n})"
+  },
+  {
+    "id": "tab-addlabel",
+    "group": "Components",
+    "signature": "Tab:AddLabel(text) -> Component",
+    "description": "Single line of dim text. Useful for inline hints.",
+    "options": [
+      { "name": "text", "type": "string", "default": "—", "desc": "Label content." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddLabel(\"Press RightShift to toggle\")"
+  },
+  {
+    "id": "tab-addparagraph",
+    "group": "Components",
+    "signature": "Tab:AddParagraph(options) -> Component",
+    "description": "Card with a bold title and wrapping body text.",
+    "options": [
+      { "name": "Title", "type": "string", "default": "—", "desc": "Bold header." },
+      { "name": "Content", "type": "string", "default": "—", "desc": "Body text." }
+    ],
+    "returns": "Component",
+    "example": "Tab:AddParagraph({\n    Title = \"Warning\", Content = \"Read before running.\",\n})"
+  },
+  {
+    "id": "tab-adddivider",
+    "group": "Components",
+    "signature": "Tab:AddDivider()",
+    "description": "A thin horizontal hairline. Separates logical groups.",
+    "options": [],
+    "returns": "Component",
+    "example": "Tab:AddDivider()"
+  },
+  {
+    "id": "component-get",
+    "group": "Component",
+    "signature": "Component:Get() -> value",
+    "description": "Returns the component's current value. Shape depends on the component (boolean for Toggle, number for Slider, string for Dropdown, etc.).",
+    "options": [],
+    "returns": "any",
+    "example": "local enabled = toggle:Get()\nprint(enabled)"
+  },
+  {
+    "id": "component-set",
+    "group": "Component",
+    "signature": "Component:Set(value)",
+    "description": "Sets the component's value and fires its Callback.",
+    "options": [
+      { "name": "value", "type": "any", "default": "—", "desc": "New value, matching the component's type." }
+    ],
+    "returns": "nil",
+    "example": "toggle:Set(true)\nslider:Set(250)"
+  }
+]

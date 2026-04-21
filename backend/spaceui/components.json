@@ -1,0 +1,177 @@
+[
+  {
+    "id": "window",
+    "name": "Window",
+    "group": "Layout",
+    "description": "The top-level container. Holds tabs, a draggable header, and a close button.",
+    "snippet": "local Window = SpaceUI:CreateWindow({\n    Title        = \"My Script\",\n    SubTitle     = \"v1.0\",\n    Size         = UDim2.fromOffset(520, 420),\n    ToggleKey    = Enum.KeyCode.RightShift,\n    ConfigFolder = \"MyScript\",\n})",
+    "props": [
+      { "name": "Title", "type": "string", "required": true, "default": "\"SpaceUI\"", "desc": "Window header title." },
+      { "name": "SubTitle", "type": "string", "required": false, "default": "\"\"", "desc": "Dim subtitle shown next to the title." },
+      { "name": "Size", "type": "UDim2", "required": false, "default": "UDim2.fromOffset(520,420)", "desc": "Initial window size." },
+      { "name": "ToggleKey", "type": "Enum.KeyCode", "required": false, "default": "Enum.KeyCode.RightShift", "desc": "Key that toggles window visibility." },
+      { "name": "ConfigFolder", "type": "string", "required": false, "default": "\"default\"", "desc": "Subfolder under SpaceUI/ for config saves." }
+    ]
+  },
+  {
+    "id": "tab",
+    "name": "Tab",
+    "group": "Layout",
+    "description": "A page inside a window. Rendered as an entry in the left sidebar.",
+    "snippet": "local Combat = Window:AddTab({ Name = \"Combat\" })\nlocal Movement = Window:AddTab({ Name = \"Movement\" })",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Tab label shown in the sidebar." },
+      { "name": "Icon", "type": "string", "required": false, "default": "nil", "desc": "Optional rbxassetid for a tab icon." }
+    ]
+  },
+  {
+    "id": "section",
+    "name": "Section",
+    "group": "Layout",
+    "description": "A titled group inside a tab with a thin hairline under its title.",
+    "snippet": "local ESP = Combat:AddSection(\"ESP\")\nESP:AddToggle({ Name = \"Enable\", Default = false })",
+    "props": [
+      { "name": "name", "type": "string", "required": true, "default": "—", "desc": "Section heading." }
+    ]
+  },
+  {
+    "id": "button",
+    "name": "Button",
+    "group": "Interactive",
+    "description": "A clickable action. Fires Callback on press.",
+    "snippet": "Tab:AddButton({\n    Name        = \"Reset Character\",\n    Description = \"Respawn your character\",\n    Callback    = function() print(\"clicked\") end,\n})",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Row label." },
+      { "name": "Description", "type": "string", "required": false, "default": "nil", "desc": "Dim subtitle under Name." },
+      { "name": "Callback", "type": "function", "required": false, "default": "nil", "desc": "Fires on click." }
+    ]
+  },
+  {
+    "id": "toggle",
+    "name": "Toggle",
+    "group": "Interactive",
+    "description": "Boolean switch. Off is a dark pill, On is a white pill with a black knob.",
+    "snippet": "Tab:AddToggle({\n    Name        = \"Enable ESP\",\n    Description = \"Boxes, names, distance\",\n    Default     = false,\n    Flag        = \"esp_enabled\",\n    Callback    = function(v) print(\"ESP:\", v) end,\n})",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Row label." },
+      { "name": "Description", "type": "string", "required": false, "default": "nil", "desc": "Dim subtitle under Name." },
+      { "name": "Default", "type": "boolean", "required": false, "default": "false", "desc": "Initial state." },
+      { "name": "Flag", "type": "string", "required": false, "default": "nil", "desc": "Config key for SaveConfig/LoadConfig." },
+      { "name": "Callback", "type": "function(boolean)", "required": false, "default": "nil", "desc": "Fires with the new value when the toggle changes." }
+    ]
+  },
+  {
+    "id": "slider",
+    "name": "Slider",
+    "group": "Interactive",
+    "description": "A numeric value between Min and Max, snapped to Increment. White fill, mono readout on the right.",
+    "snippet": "Tab:AddSlider({\n    Name      = \"Max Distance\",\n    Min       = 0,\n    Max       = 1000,\n    Default   = 300,\n    Increment = 1,\n    Suffix    = \"studs\",\n    Flag      = \"esp_max\",\n    Callback  = function(v) end,\n})",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Row label." },
+      { "name": "Min", "type": "number", "required": true, "default": "0", "desc": "Minimum value." },
+      { "name": "Max", "type": "number", "required": true, "default": "100", "desc": "Maximum value." },
+      { "name": "Default", "type": "number", "required": false, "default": "Min", "desc": "Initial value." },
+      { "name": "Increment", "type": "number", "required": false, "default": "1", "desc": "Snap step." },
+      { "name": "Suffix", "type": "string", "required": false, "default": "\"\"", "desc": "Appended after the value (e.g. 'studs')." },
+      { "name": "Flag", "type": "string", "required": false, "default": "nil", "desc": "Config key." },
+      { "name": "Callback", "type": "function(number)", "required": false, "default": "nil", "desc": "Fires on change." }
+    ]
+  },
+  {
+    "id": "dropdown",
+    "name": "Dropdown",
+    "group": "Interactive",
+    "description": "Single- or multi-select from a list of options. The floating panel is parented to an overlay layer so it never clips.",
+    "snippet": "Tab:AddDropdown({\n    Name     = \"Target Mode\",\n    Options  = { \"Closest\", \"LowHealth\", \"Random\" },\n    Default  = \"Closest\",\n    Multi    = false,\n    Flag     = \"target_mode\",\n    Callback = function(v) end,\n})",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Row label." },
+      { "name": "Options", "type": "{ string }", "required": true, "default": "{}", "desc": "List of option strings." },
+      { "name": "Default", "type": "string | { string }", "required": false, "default": "nil", "desc": "Initial selection (table if Multi)." },
+      { "name": "Multi", "type": "boolean", "required": false, "default": "false", "desc": "When true, Callback receives a table of selected names." },
+      { "name": "Flag", "type": "string", "required": false, "default": "nil", "desc": "Config key." },
+      { "name": "Callback", "type": "function(string|table)", "required": false, "default": "nil", "desc": "Fires on selection change." }
+    ]
+  },
+  {
+    "id": "input",
+    "name": "Input",
+    "group": "Interactive",
+    "description": "Single-line text field. Callback fires on FocusLost.",
+    "snippet": "Tab:AddInput({\n    Name         = \"Custom Name\",\n    Placeholder  = \"Enter a value\",\n    Default      = \"\",\n    ClearOnFocus = false,\n    Flag         = \"custom_name\",\n    Callback     = function(v) print(v) end,\n})",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Row label." },
+      { "name": "Placeholder", "type": "string", "required": false, "default": "\"\"", "desc": "Placeholder text shown when empty." },
+      { "name": "Default", "type": "string", "required": false, "default": "\"\"", "desc": "Initial text." },
+      { "name": "ClearOnFocus", "type": "boolean", "required": false, "default": "false", "desc": "Clear text when user focuses." },
+      { "name": "Flag", "type": "string", "required": false, "default": "nil", "desc": "Config key." },
+      { "name": "Callback", "type": "function(string)", "required": false, "default": "nil", "desc": "Fires on FocusLost." }
+    ]
+  },
+  {
+    "id": "keybind",
+    "name": "Keybind",
+    "group": "Interactive",
+    "description": "Click to rebind. Shows '...' while capturing the next key or mouse button.",
+    "snippet": "Tab:AddKeybind({\n    Name     = \"Panic Key\",\n    Default  = Enum.KeyCode.P,\n    Flag     = \"panic_key\",\n    Callback = function() end,\n})",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Row label." },
+      { "name": "Default", "type": "Enum.KeyCode | Enum.UserInputType", "required": false, "default": "nil", "desc": "Initial binding. Mouse buttons supported." },
+      { "name": "Flag", "type": "string", "required": false, "default": "nil", "desc": "Config key." },
+      { "name": "Callback", "type": "function()", "required": false, "default": "nil", "desc": "Fires when the bound input is pressed." }
+    ]
+  },
+  {
+    "id": "colorpicker",
+    "name": "ColorPicker",
+    "group": "Interactive",
+    "description": "HSV picker. Chrome is monochrome; the SV/hue panel is the only place colour renders — because, well, it IS a colour picker.",
+    "snippet": "Tab:AddColorPicker({\n    Name     = \"ESP Color\",\n    Default  = Color3.fromRGB(255, 255, 255),\n    Flag     = \"esp_color\",\n    Callback = function(c) end,\n})",
+    "props": [
+      { "name": "Name", "type": "string", "required": true, "default": "—", "desc": "Row label." },
+      { "name": "Default", "type": "Color3", "required": false, "default": "Color3.new(1,1,1)", "desc": "Initial colour." },
+      { "name": "Flag", "type": "string", "required": false, "default": "nil", "desc": "Config key." },
+      { "name": "Callback", "type": "function(Color3)", "required": false, "default": "nil", "desc": "Fires on colour change." }
+    ]
+  },
+  {
+    "id": "label",
+    "name": "Label",
+    "group": "Static",
+    "description": "A single line of dim text. Useful for tips and annotations.",
+    "snippet": "Tab:AddLabel(\"Press RightShift to toggle the UI.\")",
+    "props": [
+      { "name": "text", "type": "string", "required": true, "default": "—", "desc": "Label content." }
+    ]
+  },
+  {
+    "id": "paragraph",
+    "name": "Paragraph",
+    "group": "Static",
+    "description": "A titled block of body text inside a thin-bordered card. Wraps automatically.",
+    "snippet": "Tab:AddParagraph({\n    Title   = \"Warning\",\n    Content = \"This script is open source. Read it before running.\",\n})",
+    "props": [
+      { "name": "Title", "type": "string", "required": true, "default": "—", "desc": "Bold header." },
+      { "name": "Content", "type": "string", "required": true, "default": "—", "desc": "Body text. Wraps." }
+    ]
+  },
+  {
+    "id": "divider",
+    "name": "Divider",
+    "group": "Static",
+    "description": "A thin horizontal hairline. Use to separate logical blocks within a section.",
+    "snippet": "Tab:AddDivider()",
+    "props": []
+  },
+  {
+    "id": "notification",
+    "name": "Notification",
+    "group": "Global",
+    "description": "Top-right toast that slides in from the right and auto-dismisses. Stacks with other notifications.",
+    "snippet": "SpaceUI:Notify({\n    Title    = \"Loaded\",\n    Content  = \"SpaceUI is ready\",\n    Duration = 4,\n})",
+    "props": [
+      { "name": "Title", "type": "string", "required": true, "default": "\"Notification\"", "desc": "Bold title." },
+      { "name": "Content", "type": "string", "required": false, "default": "\"\"", "desc": "Body text." },
+      { "name": "Duration", "type": "number", "required": false, "default": "5", "desc": "Seconds before auto-dismiss." }
+    ]
+  }
+]

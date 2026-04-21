@@ -5,6 +5,7 @@ const links = [
   { to: "/getting-started", label: "Docs" },
   { to: "/components", label: "Components" },
   { to: "/examples", label: "Examples" },
+  { to: "/reference", label: "API" },
 ];
 
 export default function Navbar() {
