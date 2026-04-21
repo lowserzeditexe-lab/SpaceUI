@@ -7,7 +7,7 @@ import requests
 import os
 
 # Use the public URL for testing
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://32afa6c7-75d5-4dc2-befe-cab0bd3d4211.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://space-ui.preview.emergentagent.com').rstrip('/')
 
 
 class TestHealthEndpoint:
