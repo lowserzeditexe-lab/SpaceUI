@@ -15,7 +15,7 @@ function App() {
           />
           <Route path="/components" element={<Stub name="Components" />} />
           <Route path="/examples" element={<Stub name="Examples" />} />
-          <Route path="/api" element={<Stub name="API Reference" />} />
+          <Route path="/reference" element={<Stub name="API Reference" />} />
           <Route path="*" element={<Stub name="Not Found" />} />
         </Routes>
       </BrowserRouter>
