@@ -566,43 +566,88 @@ secPlayers:AddButton({
 })
 
 -- ── Money UI — Bronx Hood ───────────────────────────────────────────────────
+-- DÉCOUVERTE : l'argent est dans LocalPlayer.Extra (même dossier que PlayTime)
+-- Le watcher a détecté LocalPlayer.Extra.PlayTime (+1/s) → Cash est là aussi.
 
--- Value Watcher — surveille TOUS les changements de valeurs du joueur
-local watchedValues = {}
-local foundMoneyPath = nil
+local foundCashObj  = nil   -- la valeur cash détectée
+local remoteSpyActive = false
 
-local function startValueWatcher()
-    local function watch(obj, path)
-        if watchedValues[obj] then return end
-        watchedValues[obj] = true
-        if obj:IsA("IntValue") or obj:IsA("NumberValue") then
-            local old = obj.Value
-            obj.Changed:Connect(function(new)
-                print(string.format("💰 VALEUR CHANGÉE: %s | %d → %d (delta: %+d)", path, old, new, new - old))
-                if new > old then
-                    foundMoneyPath = path
-                    SpaceUI:Notify({
-                        Title   = "💰 Argent trouvé !",
-                        Content = path .. "\n" .. old .. " → " .. new .. " (+" .. (new-old) .. ")",
-                        Duration = 6,
-                    })
-                end
-                old = new
-            end)
-        end
-        for _, child in ipairs(obj:GetChildren()) do
-            watch(child, path .. "." .. child.Name)
-        end
-        obj.ChildAdded:Connect(function(child)
-            watch(child, path .. "." .. child.Name)
-        end)
-    end
-    watch(LP, "LocalPlayer")
-    print("✅ Value Watcher actif — gagne de l'argent pour révéler le chemin")
+-- ── Scan LocalPlayer.Extra ────────────────────────────────────────────────────
+local function getExtra()
+    return LP:FindFirstChild("Extra")
 end
 
--- Remote Spy — intercepte tous les FireServer sortants (hookmetamethod)
-local remoteSpyActive = false
+local function printExtra()
+    local extra = getExtra()
+    if not extra then print("❌ LocalPlayer.Extra introuvable"); return end
+    print("=== LocalPlayer.Extra ===")
+    for _, v in ipairs(extra:GetChildren()) do
+        local val = ""
+        pcall(function() val = tostring((v :: any).Value) end)
+        print(string.format("  [%s] %s = %s", v.ClassName, v.Name, val))
+    end
+    print(("="):rep(28))
+end
+
+-- ── Trouve et surveille la valeur Cash dans Extra ────────────────────────────
+local function watchExtra()
+    local extra = getExtra()
+    if not extra then
+        print("❌ LocalPlayer.Extra introuvable"); return false
+    end
+    -- Surveille tous les enfants (filtre PlayTime et delta=1)
+    local function watchVal(v)
+        if not (v:IsA("IntValue") or v:IsA("NumberValue")) then return end
+        if v.Name == "PlayTime" then return end  -- ignore le timer
+        local old = v.Value
+        v.Changed:Connect(function(new)
+            local delta = new - old
+            -- Ignore les micro-changements (-1/+1) sauf si c'est clairement de l'argent
+            if math.abs(delta) <= 1 and v.Name:lower():find("time") then old = new; return end
+            print(string.format("💰 Extra.%s | %d → %d (delta: %+d)", v.Name, old, new, delta))
+            if delta > 0 then
+                foundCashObj = v
+                SpaceUI:Notify({
+                    Title   = "💰 Cash trouvé : Extra." .. v.Name,
+                    Content = old .. " → " .. new .. " (+" .. delta .. ")\nUtilise Give Direct !",
+                    Duration = 8,
+                })
+            end
+            old = new
+        end)
+    end
+    for _, v in ipairs(extra:GetChildren()) do watchVal(v) end
+    extra.ChildAdded:Connect(function(v) watchVal(v) end)
+    print("✅ Watcher actif sur LocalPlayer.Extra (PlayTime ignoré)")
+    return true
+end
+
+-- ── Give Direct sur la valeur trouvée ────────────────────────────────────────
+local function giveMoneyDirect(amount)
+    -- Essaie la valeur détectée en premier
+    if foundCashObj then
+        local old = foundCashObj.Value
+        foundCashObj.Value = foundCashObj.Value + amount
+        return true, string.format("Extra.%s: %d → %d", foundCashObj.Name, old, foundCashObj.Value)
+    end
+    -- Fallback : cherche par noms courants dans Extra
+    local extra = getExtra()
+    if extra then
+        local NAMES = {"Cash","Money","Dollars","Bucks","Coins","Balance","Bills","Credits"}
+        for _, name in ipairs(NAMES) do
+            local v = extra:FindFirstChild(name)
+            if v and (v:IsA("IntValue") or v:IsA("NumberValue")) then
+                local old = v.Value
+                v.Value = v.Value + amount
+                foundCashObj = v
+                return true, string.format("Extra.%s: %d → %d", name, old, v.Value)
+            end
+        end
+    end
+    return false, "Lance le Watcher et gagne 1x de l'argent d'abord"
+end
+
+-- ── Remote Spy (hookmetamethod) ───────────────────────────────────────────────
 local function startRemoteSpy()
     local ok = pcall(function()
         local old
@@ -611,7 +656,7 @@ local function startRemoteSpy()
             if remoteSpyActive and (m == "FireServer" or m == "InvokeServer") then
                 if self:IsA("RemoteEvent") or self:IsA("RemoteFunction") then
                     local args = {...}
-                    local s = "🔴 " .. self:GetFullName() .. " (" .. m .. ")"
+                    local s = "🔴 " .. self:GetFullName() .. " [" .. m .. "]"
                     for i, v in ipairs(args) do
                         s = s .. string.format("\n  [%d] %s: %s", i, type(v), tostring(v))
                     end
@@ -621,116 +666,111 @@ local function startRemoteSpy()
             return old(self, ...)
         end))
     end)
-    if not ok then
-        print("⚠️ hookmetamethod indisponible — exécuteur non supporté (utilise KRNL/Synapse/Solara)")
-        return false
-    end
+    if not ok then return false end
     remoteSpyActive = true
-    print("✅ Remote Spy actif — fais une action pour voir les calls")
     return true
-end
-
--- Modifier directement la valeur trouvée par le watcher
-local function setMoneyDirect(amount)
-    if not foundMoneyPath then return false, "Lance d'abord le Value Watcher + gagne 1x de l'argent" end
-    -- Navigue jusqu'à la valeur
-    local parts = {}
-    for part in foundMoneyPath:gmatch("[^.]+") do parts[#parts+1] = part end
-    local obj = game
-    for i = 2, #parts do  -- skip "LocalPlayer" → start from LP
-        obj = obj:FindFirstChild(parts[i]) or LP
-        if not obj then return false, "Chemin introuvable: " .. parts[i] end
-    end
-    if obj and (obj:IsA("IntValue") or obj:IsA("NumberValue")) then
-        local old = obj.Value
-        obj.Value = obj.Value + amount
-        return true, foundMoneyPath .. ": " .. old .. " → " .. obj.Value
-    end
-    return false, "Objet non modifiable"
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 
-local secStep1 = tabMoney:AddSection("Étape 1 — Surveiller les valeurs")
+local secDiscover = tabMoney:AddSection("🔎 Découverte (LocalPlayer.Extra)")
 
-secStep1:AddParagraph({
-    Title = "Comment ça marche",
-    Content = "1. Active le Value Watcher\n2. Gagne de l'argent UNE FOIS dans le jeu\n3. Le script trouve automatiquement où est stocké l'argent\n4. Utilise 'Give Direct' pour en ajouter",
+secDiscover:AddParagraph({
+    Title   = "✅ Trouvé : LocalPlayer.Extra",
+    Content = "PlayTime est dans Extra → le Cash aussi.\n1. Print Extra pour voir les valeurs\n2. Active le Watcher + gagne 1x de l'argent\n3. Give Direct pour ajouter du cash",
 })
 
-secStep1:AddButton({
-    Name = "👁  Activer Value Watcher",
+secDiscover:AddButton({
+    Name = "🖨️  Print LocalPlayer.Extra (F9)",
     Callback = function()
-        startValueWatcher()
-        SpaceUI:Notify({
-            Title   = "Value Watcher actif ✓",
-            Content = "Va gagner de l'argent normalement.\nLe script détectera la valeur automatiquement.",
-            Duration = 5,
-        })
+        printExtra()
+        SpaceUI:Notify({ Title = "Extra printé → F9", Duration = 3 })
     end,
 })
 
-local secStep2 = tabMoney:AddSection("Étape 2 — Remote Spy (exécuteurs avancés)")
-
-secStep2:AddButton({
-    Name = "🔴  Activer Remote Spy (hookmetamethod)",
+secDiscover:AddButton({
+    Name = "👁  Activer Watcher (Extra uniquement)",
     Callback = function()
-        local ok = startRemoteSpy()
+        local ok = watchExtra()
         SpaceUI:Notify({
-            Title   = ok and "Remote Spy actif 🔴" or "Non supporté ⚠️",
-            Content = ok
-                and "Fais une action qui donne de l'argent.\nVoir console F9."
-                or  "Ton exécuteur ne supporte pas hookmetamethod.",
+            Title   = ok and "Watcher actif ✓" or "Extra introuvable ❌",
+            Content = ok and "Gagne 1x de l'argent — le nom sera révélé !" or "Reload le script",
             Duration = 4,
         })
     end,
 })
 
-secStep2:AddButton({
-    Name = "⏹  Désactiver Remote Spy",
-    Callback = function()
-        remoteSpyActive = false
-        SpaceUI:Notify({ Title = "Remote Spy OFF", Duration = 2 })
-    end,
-})
+local secGive = tabMoney:AddSection("💰 Give Money")
 
-local secStep3 = tabMoney:AddSection("Étape 3 — Give Money")
-
-secStep3:AddSlider({
+secGive:AddSlider({
     Name = "Montant", Min = 100, Max = 999999, Default = 5000,
     Suffix = " $", Increment = 100, Flag = "money_amount",
     Callback = function(v) moneyAmount = v end,
 })
 
-secStep3:AddButton({
-    Name = "💰  Give Direct (valeur détectée)",
+secGive:AddButton({
+    Name = "💰  Give Direct (Extra.Cash)",
     Callback = function()
-        local ok, msg = setMoneyDirect(moneyAmount)
+        local ok, msg = giveMoneyDirect(moneyAmount)
+        print((ok and "✅ " or "❌ ") .. msg)
         SpaceUI:Notify({
             Title   = ok and ("+" .. moneyAmount .. "$ ✅") or "Erreur ❌",
-            Content = msg, Duration = 3,
+            Content = msg, Duration = 4,
         })
     end,
 })
 
-secStep3:AddButton({
-    Name = "💰  Fire GiveMoney (serveur)",
+secGive:AddButton({
+    Name = "💎  Max Cash ($999 999)",
     Callback = function()
-        local result = giveMoney(moneyAmount)
-        SpaceUI:Notify({ Title = "+" .. moneyAmount .. "$", Content = result:match("^[^\n]+"), Duration = 3 })
+        local ok, msg = giveMoneyDirect(999999)
+        print((ok and "✅ " or "❌ ") .. msg)
+        SpaceUI:Notify({ Title = ok and "+999 999$ ✅" or "❌", Content = msg, Duration = 4 })
     end,
 })
 
-secStep3:AddButton({
-    Name = "💎  Max Cash ($999 999)",
-    Callback = function()
-        local ok, msg = setMoneyDirect(999999)
-        if not ok then
-            local result = giveMoney(999999)
-            SpaceUI:Notify({ Title = "+999 999$", Content = result:match("^[^\n]+"), Duration = 3 })
+local secLoop = tabMoney:AddSection("♾️  Loop Give")
+local loopActive = false
+local loopConn   = nil
+
+secLoop:AddToggle({
+    Name = "Loop +$5000 toutes les 0.5s", Default = false, Flag = "money_loop",
+    Callback = function(v)
+        loopActive = v
+        if v then
+            loopConn = task.spawn(function()
+                while loopActive do
+                    giveMoneyDirect(moneyAmount)
+                    task.wait(0.5)
+                end
+            end)
+            SpaceUI:Notify({ Title = "Loop Money ON 💸", Duration = 2 })
         else
-            SpaceUI:Notify({ Title = "+999 999$ ✅", Content = msg, Duration = 3 })
+            loopActive = false
+            if loopConn then pcall(function() task.cancel(loopConn) end); loopConn = nil end
+            SpaceUI:Notify({ Title = "Loop Money OFF", Duration = 2 })
         end
+    end,
+})
+
+local secSpy = tabMoney:AddSection("🔴 Remote Spy (avancé)")
+
+secSpy:AddButton({
+    Name = "🔴  Activer Remote Spy",
+    Callback = function()
+        local ok = startRemoteSpy()
+        SpaceUI:Notify({
+            Title   = ok and "Remote Spy actif 🔴" or "Non supporté ⚠️",
+            Content = ok and "Fais une action → F9" or "Exécuteur incompatible",
+            Duration = 4,
+        })
+    end,
+})
+secSpy:AddButton({
+    Name = "⏹  Désactiver Remote Spy",
+    Callback = function()
+        remoteSpyActive = false
+        SpaceUI:Notify({ Title = "Remote Spy OFF", Duration = 2 })
     end,
 })
 
@@ -745,19 +785,6 @@ secTurf:AddToggle({
         else
             stopTurfFarm()
             SpaceUI:Notify({ Title = "Turf Farm OFF", Duration = 2 })
-        end
-    end,
-})
-
-secTurf:AddButton({
-    Name = "⚡  Fire TurfCaptured (×1)",
-    Callback = function()
-        local ev = getTurfEvent("TurfCaptured")
-        if ev then
-            pcall(function() ev:FireServer() end)
-            SpaceUI:Notify({ Title = "TurfCaptured fired ✓", Duration = 2 })
-        else
-            SpaceUI:Notify({ Title = "Introuvable", Content = "TurfCaptured", Duration = 2 })
         end
     end,
 })
