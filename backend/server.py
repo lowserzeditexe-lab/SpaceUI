@@ -33,38 +33,36 @@ async def health():
     return {"status": "ok", "service": "spaceui"}
 
 
-# Placeholder Lua library content — Phase 2 will replace with the real library.
-SPACEUI_LUA = """-- SpaceUI v0.1 (Phase 2 will implement this)
-return {}
-"""
+# Load the real Lua library from disk at startup.
+# Kept on the filesystem so it's human-readable and diffable.
+SPACEUI_LUA_PATH = ROOT_DIR / "spaceui" / "spaceui.lua"
+
+
+def _load_lua() -> str:
+    return SPACEUI_LUA_PATH.read_text(encoding="utf-8")
+
+
+def _lua_response() -> Response:
+    return Response(
+        content=_load_lua(),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @app.get("/spaceui.lua")
 async def spaceui_lua():
-    # Served OUTSIDE /api so the loadstring URL is clean.
-    # Roblox HttpGet needs open CORS.
-    return Response(
-        content=SPACEUI_LUA,
-        media_type="text/plain; charset=utf-8",
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "no-cache",
-        },
-    )
+    # Local convenience route — blocked by K8s ingress externally.
+    return _lua_response()
 
 
-# Also serve via /api prefix for Kubernetes ingress routing
 @api_router.get("/spaceui.lua")
 async def spaceui_lua_api():
-    """Alias for /spaceui.lua accessible via /api prefix for K8s ingress."""
-    return Response(
-        content=SPACEUI_LUA,
-        media_type="text/plain; charset=utf-8",
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "no-cache",
-        },
-    )
+    """Public loadstring endpoint for Roblox HttpGet."""
+    return _lua_response()
 
 
 # Include the router in the main app
