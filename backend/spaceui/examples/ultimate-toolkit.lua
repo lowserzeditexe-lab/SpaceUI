@@ -565,50 +565,122 @@ secPlayers:AddButton({
     end,
 })
 
--- ── Money › Bronx Hood ───────────────────────────────────────────────────────
-local secScan = tabMoney:AddSection("Scan argent")
+-- ── Money UI ─────────────────────────────────────────────────────────────────
 
-local scanPara = secScan:AddParagraph({
-    Title   = "Statut",
-    Content = "Aucun money remote dans ReplicatedStorage.\nUtilise Deep Scan pour chercher partout.",
+-- Intercepteur : capture les vrais paramètres quand le serveur donne de l'argent
+local interceptorActive = false
+local lastCaptured      = nil
+
+local function setupInterceptor()
+    if interceptorActive then return end
+    interceptorActive = true
+    local toHook = {"GiveMoney","ShowRewardMessage","GroupRewardMessage","UpdateDatastore","BankAction"}
+    for _, evName in ipairs(toHook) do
+        local ev = RS:FindFirstChild(evName)
+        if ev then
+            ev.OnClientEvent:Connect(function(...)
+                local args = {...}
+                print("=== INTERCEPTÉ: " .. evName .. " (server→client) ===")
+                for i, v in ipairs(args) do
+                    print(string.format("  [%d] %s = %s", i, type(v), tostring(v)))
+                end
+                -- Stocke les paramètres pour replay
+                if evName == "GiveMoney" or evName == "ShowRewardMessage" then
+                    lastCaptured = {name = evName, args = args}
+                    SpaceUI:Notify({
+                        Title   = "💰 Capturé: " .. evName,
+                        Content = #args .. " arg(s) capturé(s) — voir F9\nClique REPLAY pour rejouer !",
+                        Duration = 6,
+                    })
+                end
+            end)
+        end
+    end
+    print("✅ Money interceptor actif — gagne 1x de l'argent normalement pour capturer les params")
+end
+
+local secInfo = tabMoney:AddSection("ℹ️  Mode d'emploi")
+
+secInfo:AddParagraph({
+    Title   = "Pourquoi ça ne marchait pas ?",
+    Content = "Le serveur valide qui peut appeler GiveMoney.\nStratégie : active l'intercepteur, gagne 1x de l'argent normalement dans le jeu, puis clique REPLAY pour rejouer les paramètres en boucle.",
 })
 
-secScan:AddButton({
-    Name = "🔬  Deep Scan (tout le jeu)",
+local secIntercept = tabMoney:AddSection("1. Intercepteur (obligatoire)")
+
+secIntercept:AddButton({
+    Name = "🎣  Activer l'intercepteur",
     Callback = function()
-        local v, name = findCashValue()
-        local lsMsg = v
-            and ("✅ leaderstats." .. name .. " = $" .. tostring(v.Value))
-            or  ("❌ " .. name)
-        local found = deepScanRemotes()
-        local rMsg = #found > 0
-            and ("✅ " .. #found .. " money remote(s) trouvé(s)")
-            or  "❌ Aucun money remote → système 100% serveur"
-        print("=== DEEP SCAN ===")
-        print(lsMsg); print(rMsg)
-        for _, r in ipairs(found) do print("  [" .. r.obj.ClassName .. "] " .. r.path) end
-        print(("="):rep(32))
-        scanPara:Set({ Title = "Deep Scan", Content = lsMsg .. "\n" .. rMsg })
-        SpaceUI:Notify({ Title = "Scan terminé", Content = lsMsg, Duration = 4 })
+        setupInterceptor()
+        SpaceUI:Notify({
+            Title   = "Intercepteur actif ✓",
+            Content = "Va gagner de l'argent UNE FOIS normalement.\nLe script capturera les params automatiquement.",
+            Duration = 5,
+        })
     end,
 })
 
-secScan:AddButton({
-    Name = "🖨️  Print leaderstats (console F9)",
+secIntercept:AddButton({
+    Name = "🔁  REPLAY (rejoue les params capturés)",
     Callback = function()
-        local stats = LP:FindFirstChild("leaderstats")
-        print("=== LEADERSTATS ===")
-        if stats then
-            for _, v in ipairs(stats:GetChildren()) do
-                print(string.format("  %s [%s] = %s", v.Name, v.ClassName, tostring((v :: any).Value)))
+        if not lastCaptured then
+            SpaceUI:Notify({ Title = "Rien capturé", Content = "Active l'intercepteur et gagne 1x de l'argent d'abord !", Duration = 3 })
+            return
+        end
+        local ev = RS:FindFirstChild(lastCaptured.name)
+        if not ev then
+            SpaceUI:Notify({ Title = "Event introuvable", Content = lastCaptured.name, Duration = 3 })
+            return
+        end
+        -- Replay 10 fois
+        for i = 1, 10 do
+            pcall(function() ev:FireServer(table.unpack(lastCaptured.args)) end)
+            task.wait(0.1)
+        end
+        SpaceUI:Notify({
+            Title   = "Replay ×10 envoyé",
+            Content = lastCaptured.name .. " rejoué 10 fois",
+            Duration = 3,
+        })
+        print("=== REPLAY: " .. lastCaptured.name .. " ===")
+        for i, v in ipairs(lastCaptured.args) do
+            print(string.format("  [%d] %s = %s", i, type(v), tostring(v)))
+        end
+    end,
+})
+
+local secLoop = tabMoney:AddSection("2. Loop Replay automatique")
+local replayLooping = false
+local replayLoopConn = nil
+
+secLoop:AddToggle({
+    Name = "⚙️  Loop Replay (toutes les 0.5s)", Default = false, Flag = "replay_loop",
+    Callback = function(v)
+        replayLooping = v
+        if v then
+            if not lastCaptured then
+                replayLooping = false
+                SpaceUI:Notify({ Title = "Rien capturé !", Content = "Active l'intercepteur d'abord", Duration = 3 })
+                return
             end
-        else print("  Pas de leaderstats") end
-        print(("="):rep(20))
-        SpaceUI:Notify({ Title = "Leaderstats printées ✓", Duration = 2 })
+            replayLoopConn = task.spawn(function()
+                while replayLooping do
+                    local ev = RS:FindFirstChild(lastCaptured.name)
+                    if ev then
+                        pcall(function() ev:FireServer(table.unpack(lastCaptured.args)) end)
+                    end
+                    task.wait(0.5)
+                end
+            end)
+            SpaceUI:Notify({ Title = "Loop ON 💸", Content = "Replay en boucle toutes les 0.5s", Duration = 3 })
+        else
+            if replayLoopConn then pcall(function() task.cancel(replayLoopConn) end); replayLoopConn = nil end
+            SpaceUI:Notify({ Title = "Loop OFF", Duration = 2 })
+        end
     end,
 })
 
-local secGive = tabMoney:AddSection("Give Money")
+local secGive = tabMoney:AddSection("3. Give Direct (GiveMoney)")
 
 secGive:AddSlider({
     Name = "Montant", Min = 100, Max = 999999, Default = 5000,
@@ -617,11 +689,11 @@ secGive:AddSlider({
 })
 
 secGive:AddButton({
-    Name = "💰  Give Money (leaderstats + deep scan)",
+    Name = "💰  Fire GiveMoney directement",
     Callback = function()
         local result = giveMoney(moneyAmount)
         SpaceUI:Notify({
-            Title   = "+" .. moneyAmount .. "$",
+            Title   = "+" .. moneyAmount .. "$ tenté",
             Content = result:match("^[^\n]+"),
             Duration = 3,
         })
@@ -632,30 +704,18 @@ secGive:AddButton({
     Name = "💎  Max Cash ($999 999)",
     Callback = function()
         local result = giveMoney(999999)
-        SpaceUI:Notify({
-            Title   = "+999 999$",
-            Content = result:match("^[^\n]+"),
-            Duration = 3,
-        })
+        SpaceUI:Notify({ Title = "+999 999$", Content = result:match("^[^\n]+"), Duration = 3 })
     end,
 })
 
-local secTurf = tabMoney:AddSection("Auto-Turf Farm 💸")
-
-secTurf:AddParagraph({
-    Title   = "Comment ça marche ?",
-    Content = "Fire TurfEvents.TurfCaptured en boucle.\nBronx Hood donne de l\'argent à chaque capture.",
-})
+local secTurf = tabMoney:AddSection("4. Auto-Turf Farm")
 
 secTurf:AddToggle({
     Name = "Auto-Turf Farm (TurfCaptured loop)", Default = false, Flag = "turf_farm",
     Callback = function(v)
         if v then
             local ok, msg = startTurfFarm()
-            SpaceUI:Notify({
-                Title   = ok and "Turf Farm ON 💸" or "Erreur",
-                Content = msg, Duration = 3,
-            })
+            SpaceUI:Notify({ Title = ok and "Turf Farm ON 💸" or "Erreur", Content = msg, Duration = 3 })
         else
             stopTurfFarm()
             SpaceUI:Notify({ Title = "Turf Farm OFF", Duration = 2 })
@@ -664,7 +724,7 @@ secTurf:AddToggle({
 })
 
 secTurf:AddButton({
-    Name = "⚡  Fire TurfCaptured (×1 fois)",
+    Name = "⚡  Fire TurfCaptured (×1)",
     Callback = function()
         local ev = getTurfEvent("TurfCaptured")
         if ev then
@@ -675,7 +735,6 @@ secTurf:AddButton({
         end
     end,
 })
-
 
 -- ── Config & Événements ───────────────────────────────────────────────────────
 Window:LoadConfig()
