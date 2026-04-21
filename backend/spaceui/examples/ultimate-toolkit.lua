@@ -318,121 +318,87 @@ end
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- MODULE MONEY — Bronx Hood
--- Analyse : ReplicatedStorage ne contient QUE des events d'armes + TurfEvents.
--- Le système d'argent est côté serveur. Stratégies :
---   1. Modification directe leaderstats (affichage client)
---   2. Deep scan de tout le jeu pour events cachés
---   3. Auto-Turf Farm via TurfEvents (récompense argent en jeu)
+-- RemoteEvents CONFIRMÉS par Deep Scan :
+--   ReplicatedStorage.GiveMoney          ← EVENT PRINCIPAL 💰
+--   ReplicatedStorage.BankTransaction    ← RemoteFunction banque
+--   ReplicatedStorage.BankAction         ← Action banque
+--   ReplicatedStorage.UpdateDatastore    ← Mise à jour datastore
+--   ReplicatedStorage.ShowRewardMessage  ← Affichage récompense
+--   ReplicatedStorage.BankVaultAlertEvent← Alerte coffre
+-- Pas de leaderstats → argent géré directement côté serveur.
 -- ══════════════════════════════════════════════════════════════════════════════
 
-local CASH_NAMES = {
-    "Cash","Money","Dollars","Bucks","Coins","Credits",
-    "CashMoney","Argent","Balance","Wallet","Bills","Bank",
-}
-local moneyAmount   = 5000
-local turfFarming   = false
-local turfFarmConn  = nil
+local moneyAmount  = 5000
+local turfFarming  = false
+local turfFarmConn = nil
 
--- ── Trouve la valeur cash dans les leaderstats ─────────────────────────────
-local function findCashValue()
-    local stats = LP:FindFirstChild("leaderstats")
-    if not stats then return nil, "Pas de leaderstats" end
-    for _, name in ipairs(CASH_NAMES) do
-        local v = stats:FindFirstChild(name)
-        if v and (v:IsA("IntValue") or v:IsA("NumberValue")) then return v, name end
-    end
-    for _, v in ipairs(stats:GetChildren()) do
-        if v:IsA("IntValue") or v:IsA("NumberValue") then return v, v.Name end
-    end
-    return nil, "Valeur introuvable"
-end
+local RS = game:GetService("ReplicatedStorage")
 
--- ── Deep scan : parcourt TOUT le jeu (pas seulement ReplicatedStorage) ──────
-local function deepScanRemotes()
-    local found = {}
-    local scanned = {}
-    local function scan(parent, path)
-        if scanned[parent] then return end
-        scanned[parent] = true
-        local ok, children = pcall(function() return parent:GetChildren() end)
-        if not ok then return end
-        for _, obj in ipairs(children) do
-            local p = path .. "." .. obj.Name
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                -- Filtre : garde seulement ceux qui ressemblent à de l'argent
-                local low = obj.Name:lower()
-                if low:find("cash") or low:find("money") or low:find("earn")
-                or low:find("reward") or low:find("job") or low:find("pay")
-                or low:find("salary") or low:find("wage") or low:find("give")
-                or low:find("rob") or low:find("bank") or low:find("store")
-                or low:find("work") or low:find("dollar") or low:find("coin") then
-                    table.insert(found, { name = obj.Name, path = p, obj = obj })
-                end
-            end
-            pcall(scan, obj, p)
-        end
-    end
-    -- Scan des services principaux
-    local services = {
-        "ReplicatedStorage", "ReplicatedFirst",
-        "Players", "Workspace",
-    }
-    for _, svcName in ipairs(services) do
-        pcall(function()
-            local svc = game:GetService(svcName)
-            scan(svc, svcName)
-        end)
-    end
-    -- Scan LocalPlayer spécifiquement
-    pcall(scan, LP, "LocalPlayer")
-    return found
-end
-
--- ── Méthode 1 : modification directe leaderstats ──────────────────────────
-local function tryDirectModify(amount)
-    local v, name = findCashValue()
-    if not v then return false, "leaderstats introuvable" end
-    local old = v.Value
-    v.Value = v.Value + amount
-    return true, string.format("%s : %d → %d", name, old, v.Value)
-end
-
--- ── Méthode 2 : fire les remotes money trouvés par deep scan ─────────────
-local function tryFoundRemotes(amount)
-    local found = deepScanRemotes()
+-- ── Give Money — events Bronx Hood ciblés directement ────────────────────────
+local function giveMoney(amount)
+    local lines = {}
     local tried = 0
-    for _, r in ipairs(found) do
+
+    -- 1. GiveMoney — event principal (plusieurs variantes)
+    local gm = RS:FindFirstChild("GiveMoney")
+    if gm then
         tried += 1
-        pcall(function()
-            if r.obj:IsA("RemoteEvent") then
-                r.obj:FireServer(amount)
-                r.obj:FireServer(amount, LP)
-                r.obj:FireServer(LP, amount)
-            else
-                r.obj:InvokeServer(amount)
-            end
-        end)
+        pcall(function() gm:FireServer(amount) end)
+        pcall(function() gm:FireServer(LP, amount) end)
+        pcall(function() gm:FireServer(amount, LP) end)
+        pcall(function() gm:FireServer({amount = amount}) end)
+        table.insert(lines, "✅ GiveMoney fired +$" .. amount)
+    else
+        table.insert(lines, "❌ GiveMoney introuvable")
     end
-    return tried > 0,
-        tried > 0 and tried .. " money remote(s) fired" or "aucun money remote trouvé"
+
+    -- 2. BankTransaction (RemoteFunction — simule un dépôt)
+    local bt = RS:FindFirstChild("BankTransaction")
+    if bt then
+        tried += 1
+        pcall(function() bt:InvokeServer("deposit", amount) end)
+        pcall(function() bt:InvokeServer(amount) end)
+        pcall(function() bt:InvokeServer({action = "deposit", amount = amount}) end)
+        table.insert(lines, "✅ BankTransaction invoked +$" .. amount)
+    end
+
+    -- 3. BankAction
+    local ba = RS:FindFirstChild("BankAction")
+    if ba then
+        tried += 1
+        pcall(function() ba:FireServer("deposit", amount) end)
+        pcall(function() ba:FireServer(amount) end)
+        table.insert(lines, "✅ BankAction fired")
+    end
+
+    -- 4. UpdateDatastore — force la mise à jour de la valeur Cash
+    local ud = RS:FindFirstChild("UpdateDatastore")
+    if ud then
+        tried += 1
+        pcall(function() ud:FireServer("Cash",  amount) end)
+        pcall(function() ud:FireServer("Money", amount) end)
+        pcall(function() ud:FireServer({Cash = amount}) end)
+        table.insert(lines, "✅ UpdateDatastore fired (Cash=" .. amount .. ")")
+    end
+
+    local full = "Tried " .. tried .. " events:\n" .. table.concat(lines, "\n")
+    print("=== GIVE MONEY +$" .. amount .. " ===")
+    print(full)
+    print(("="):rep(32))
+    return full
 end
 
--- ── Méthode 3 : Auto-Turf Farm (TurfEvents.TurfCaptured → argent en jeu) ──
+-- ── TurfEvents helpers ────────────────────────────────────────────────────────
 local function getTurfEvent(name)
-    local ok, v = pcall(function()
-        return game:GetService("ReplicatedStorage").TurfEvents[name]
-    end)
+    local ok, v = pcall(function() return RS.TurfEvents[name] end)
     return ok and v or nil
 end
 
 local function startTurfFarm()
     local evCapture = getTurfEvent("TurfCaptured")
     local evStart   = getTurfEvent("StartCapture")
-    if not evCapture and not evStart then
-        return false, "TurfEvents introuvable"
-    end
+    if not evCapture and not evStart then return false, "TurfEvents introuvable" end
     turfFarming = true
-    local delay = 2  -- secondes entre chaque fire
     turfFarmConn = task.spawn(function()
         while turfFarming do
             pcall(function()
@@ -440,30 +406,15 @@ local function startTurfFarm()
                 task.wait(0.5)
                 if evCapture then evCapture:FireServer() end
             end)
-            task.wait(delay)
+            task.wait(2)
         end
     end)
-    return true, "Turf farm démarré (TurfCaptured loop)"
+    return true, "Turf farm démarré"
 end
 
 local function stopTurfFarm()
     turfFarming = false
-    if turfFarmConn then
-        pcall(function() task.cancel(turfFarmConn) end)
-        turfFarmConn = nil
-    end
-end
-
--- ── Give Money principal ──────────────────────────────────────────────────
-local function giveMoney(amount)
-    local lines = {}
-    local ok1, msg1 = tryDirectModify(amount)
-    table.insert(lines, (ok1 and "✅" or "⚠️") .. " Leaderstats: " .. msg1)
-    local ok2, msg2 = tryFoundRemotes(amount)
-    table.insert(lines, (ok2 and "✅" or "⚠️") .. " Deep scan: " .. msg2)
-    local full = table.concat(lines, "\n")
-    print("=== GIVE MONEY +$" .. amount .. " ===\n" .. full .. "\n" .. string.rep("=",32))
-    return full
+    if turfFarmConn then pcall(function() task.cancel(turfFarmConn) end); turfFarmConn = nil end
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
