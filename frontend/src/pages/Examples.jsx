@@ -4,7 +4,8 @@ import { Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 import DocLayout from "@/components/DocLayout";
 import CodeBlock from "@/components/CodeBlock";
 
-const API = `${process.env.REACT_APP_BACKEND_URL || ""}/api`;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
+const API = `${BACKEND_URL}/api`;
 
 export default function Examples() {
   const [data, setData] = useState([]);
@@ -93,6 +94,7 @@ function ExampleCard({ ex }) {
   return (
     <article
       data-testid={`example-${ex.id}`}
+      id={ex.id}
       className="card"
       style={{ padding: 24 }}
     >
@@ -187,6 +189,26 @@ function ExampleCard({ ex }) {
           />
         </div>
       )}
+
+      <div className="mt-6" data-testid={`example-${ex.id}-oneliner`}>
+        <p
+          className="mb-2"
+          style={{
+            color: "var(--text-muted)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.6875rem",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+          }}
+        >
+          One-liner install
+        </p>
+        <CodeBlock
+          code={`loadstring(game:HttpGet("${BACKEND_URL}/api/examples/${ex.id}.lua"))()`}
+          testId={`example-${ex.id}-oneliner-block`}
+          label={`lua · ${ex.id}.lua`}
+        />
+      </div>
     </article>
   );
 }

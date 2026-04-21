@@ -1,5 +1,5 @@
 import { NavLink, Link } from "react-router-dom";
-import { Github } from "lucide-react";
+import { Github, Search } from "lucide-react";
 
 const links = [
   { to: "/getting-started", label: "Docs" },
@@ -7,6 +7,10 @@ const links = [
   { to: "/examples", label: "Examples" },
   { to: "/reference", label: "API" },
 ];
+
+function openSearch() {
+  window.dispatchEvent(new CustomEvent("spaceui:open-search"));
+}
 
 export default function Navbar() {
   return (
@@ -61,6 +65,64 @@ export default function Navbar() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <button
+            data-testid="nav-search-btn"
+            onClick={openSearch}
+            aria-label="Open search"
+            className="hidden sm:inline-flex items-center gap-2"
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "rgba(255,255,255,0.02)",
+              color: "var(--text-dim)",
+              fontSize: "0.8125rem",
+              transition:
+                "border-color 200ms ease-out, color 200ms ease-out, background 200ms ease-out",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "var(--border-strong)";
+              e.currentTarget.style.color = "var(--text)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--border)";
+              e.currentTarget.style.color = "var(--text-dim)";
+            }}
+          >
+            <Search size={13} />
+            <span className="hidden lg:inline">Search</span>
+            <span
+              style={{
+                padding: "1px 5px",
+                borderRadius: 4,
+                border: "1px solid var(--border)",
+                fontSize: "0.6875rem",
+                fontFamily: "var(--font-mono)",
+                marginLeft: 2,
+              }}
+              className="hidden lg:inline"
+            >
+              ⌘K
+            </span>
+          </button>
+          <button
+            data-testid="nav-search-btn-mobile"
+            onClick={openSearch}
+            aria-label="Open search"
+            className="sm:hidden inline-flex items-center justify-center"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "rgba(255,255,255,0.02)",
+              color: "var(--text-dim)",
+              cursor: "pointer",
+            }}
+          >
+            <Search size={15} />
+          </button>
           <Link
             to="/getting-started"
             data-testid="nav-cta-docs"
