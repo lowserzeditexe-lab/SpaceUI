@@ -316,64 +316,79 @@ local function stopFly()
     if hum then hum.PlatformStand = false end
 end
 
--- ── Module Money (Bronx Hood — auto-détection) ───────────────────────────────
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MODULE MONEY — Bronx Hood
+-- Analyse : ReplicatedStorage ne contient QUE des events d'armes + TurfEvents.
+-- Le système d'argent est côté serveur. Stratégies :
+--   1. Modification directe leaderstats (affichage client)
+--   2. Deep scan de tout le jeu pour events cachés
+--   3. Auto-Turf Farm via TurfEvents (récompense argent en jeu)
+-- ══════════════════════════════════════════════════════════════════════════════
 
--- Noms courants de valeurs d'argent dans les leaderstats
 local CASH_NAMES = {
-    "Cash", "Money", "Dollars", "Bucks", "Coins", "Credits",
-    "CashMoney", "Cash Money", "Argent", "Balance", "Wallet",
+    "Cash","Money","Dollars","Bucks","Coins","Credits",
+    "CashMoney","Argent","Balance","Wallet","Bills","Bank",
 }
+local moneyAmount   = 5000
+local turfFarming   = false
+local turfFarmConn  = nil
 
--- Noms courants de RemoteEvents pour donner de l'argent
-local REMOTE_NAMES = {
-    "GiveCash",  "AddCash",   "AddMoney",   "GiveMoney",
-    "UpdateCash","UpdateMoney","CashUpdate", "MoneyUpdate",
-    "SetCash",   "SetMoney",  "EarnCash",   "EarnMoney",
-    "Earn",      "PlayerCash","PlayerMoney","CashEvent",
-    "MoneyEvent","CashChanged","MoneyChanged","CashAdd",
-    "MoneyAdd",  "Cash",      "Money",
-}
-
-local moneyAmount = 5000
-
--- Cherche la valeur d'argent dans les leaderstats du joueur
+-- ── Trouve la valeur cash dans les leaderstats ─────────────────────────────
 local function findCashValue()
     local stats = LP:FindFirstChild("leaderstats")
     if not stats then return nil, "Pas de leaderstats" end
-    -- Cherche par noms connus
     for _, name in ipairs(CASH_NAMES) do
         local v = stats:FindFirstChild(name)
-        if v and (v:IsA("IntValue") or v:IsA("NumberValue")) then
-            return v, name
-        end
+        if v and (v:IsA("IntValue") or v:IsA("NumberValue")) then return v, name end
     end
-    -- Fallback : premier IntValue / NumberValue trouvé
     for _, v in ipairs(stats:GetChildren()) do
-        if v:IsA("IntValue") or v:IsA("NumberValue") then
-            return v, v.Name
-        end
+        if v:IsA("IntValue") or v:IsA("NumberValue") then return v, v.Name end
     end
     return nil, "Valeur introuvable"
 end
 
--- Scanne tous les RemoteEvents dans ReplicatedStorage (récursif)
-local function scanAllRemotes()
-    local RS = game:GetService("ReplicatedStorage")
+-- ── Deep scan : parcourt TOUT le jeu (pas seulement ReplicatedStorage) ──────
+local function deepScanRemotes()
     local found = {}
+    local scanned = {}
     local function scan(parent, path)
-        for _, obj in ipairs(parent:GetChildren()) do
+        if scanned[parent] then return end
+        scanned[parent] = true
+        local ok, children = pcall(function() return parent:GetChildren() end)
+        if not ok then return end
+        for _, obj in ipairs(children) do
             local p = path .. "." .. obj.Name
             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                table.insert(found, { name = obj.Name, path = p, obj = obj })
+                -- Filtre : garde seulement ceux qui ressemblent à de l'argent
+                local low = obj.Name:lower()
+                if low:find("cash") or low:find("money") or low:find("earn")
+                or low:find("reward") or low:find("job") or low:find("pay")
+                or low:find("salary") or low:find("wage") or low:find("give")
+                or low:find("rob") or low:find("bank") or low:find("store")
+                or low:find("work") or low:find("dollar") or low:find("coin") then
+                    table.insert(found, { name = obj.Name, path = p, obj = obj })
+                end
             end
             pcall(scan, obj, p)
         end
     end
-    scan(RS, "ReplicatedStorage")
+    -- Scan des services principaux
+    local services = {
+        "ReplicatedStorage", "ReplicatedFirst",
+        "Players", "Workspace",
+    }
+    for _, svcName in ipairs(services) do
+        pcall(function()
+            local svc = game:GetService(svcName)
+            scan(svc, svcName)
+        end)
+    end
+    -- Scan LocalPlayer spécifiquement
+    pcall(scan, LP, "LocalPlayer")
     return found
 end
 
--- Méthode 1 : modification directe de la leaderstats (côté client)
+-- ── Méthode 1 : modification directe leaderstats ──────────────────────────
 local function tryDirectModify(amount)
     local v, name = findCashValue()
     if not v then return false, "leaderstats introuvable" end
@@ -382,47 +397,72 @@ local function tryDirectModify(amount)
     return true, string.format("%s : %d → %d", name, old, v.Value)
 end
 
--- Méthode 2 : essaie les RemoteEvents courants avec le montant
-local function tryRemoteEvents(amount)
-    local RS = game:GetService("ReplicatedStorage")
+-- ── Méthode 2 : fire les remotes money trouvés par deep scan ─────────────
+local function tryFoundRemotes(amount)
+    local found = deepScanRemotes()
     local tried = 0
-    local function tryOnParent(parent)
-        for _, obj in ipairs(parent:GetChildren()) do
-            for _, remoteName in ipairs(REMOTE_NAMES) do
-                if obj.Name:lower():find(remoteName:lower(), 1, true) then
-                    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                        tried += 1
-                        pcall(function()
-                            if obj:IsA("RemoteEvent") then
-                                obj:FireServer(amount)
-                                obj:FireServer(amount, amount)   -- variante 2 args
-                            else
-                                obj:InvokeServer(amount)
-                            end
-                        end)
-                    end
-                end
+    for _, r in ipairs(found) do
+        tried += 1
+        pcall(function()
+            if r.obj:IsA("RemoteEvent") then
+                r.obj:FireServer(amount)
+                r.obj:FireServer(amount, LP)
+                r.obj:FireServer(LP, amount)
+            else
+                r.obj:InvokeServer(amount)
             end
-            pcall(tryOnParent, obj)
-        end
+        end)
     end
-    tryOnParent(RS)
-    return tried, tried > 0
-        and tried .. " remote(s) fired"
-        or  "aucun remote reconnu"
+    return tried > 0,
+        tried > 0 and tried .. " money remote(s) fired" or "aucun money remote trouvé"
 end
 
--- Fonction principale : donne de l'argent via toutes les méthodes
+-- ── Méthode 3 : Auto-Turf Farm (TurfEvents.TurfCaptured → argent en jeu) ──
+local function getTurfEvent(name)
+    local ok, v = pcall(function()
+        return game:GetService("ReplicatedStorage").TurfEvents[name]
+    end)
+    return ok and v or nil
+end
+
+local function startTurfFarm()
+    local evCapture = getTurfEvent("TurfCaptured")
+    local evStart   = getTurfEvent("StartCapture")
+    if not evCapture and not evStart then
+        return false, "TurfEvents introuvable"
+    end
+    turfFarming = true
+    local delay = 2  -- secondes entre chaque fire
+    turfFarmConn = task.spawn(function()
+        while turfFarming do
+            pcall(function()
+                if evStart   then evStart:FireServer() end
+                task.wait(0.5)
+                if evCapture then evCapture:FireServer() end
+            end)
+            task.wait(delay)
+        end
+    end)
+    return true, "Turf farm démarré (TurfCaptured loop)"
+end
+
+local function stopTurfFarm()
+    turfFarming = false
+    if turfFarmConn then
+        pcall(function() task.cancel(turfFarmConn) end)
+        turfFarmConn = nil
+    end
+end
+
+-- ── Give Money principal ──────────────────────────────────────────────────
 local function giveMoney(amount)
     local lines = {}
     local ok1, msg1 = tryDirectModify(amount)
-    table.insert(lines, (ok1 and "✅" or "⚠️") .. " Direct: " .. msg1)
-    local n, ok2, msg2 = tryRemoteEvents(amount)
-    table.insert(lines, (ok2 and "✅" or "⚠️") .. " Remote: " .. msg2)
+    table.insert(lines, (ok1 and "✅" or "⚠️") .. " Leaderstats: " .. msg1)
+    local ok2, msg2 = tryFoundRemotes(amount)
+    table.insert(lines, (ok2 and "✅" or "⚠️") .. " Deep scan: " .. msg2)
     local full = table.concat(lines, "\n")
-    print("=== GIVE MONEY +$" .. amount .. " ===")
-    print(full)
-    print(string.rep("=", 30))
+    print("=== GIVE MONEY +$" .. amount .. " ===\n" .. full .. "\n" .. string.rep("=",32))
     return full
 end
 
@@ -575,69 +615,63 @@ secPlayers:AddButton({
 })
 
 -- ── Money › Bronx Hood ───────────────────────────────────────────────────────
-local secScan = tabMoney:AddSection("Détection auto")
+local secScan = tabMoney:AddSection("Scan argent")
 
 local scanPara = secScan:AddParagraph({
     Title   = "Statut",
-    Content = "Lance 'Scanner' pour détecter leaderstats + RemoteEvents du jeu.",
+    Content = "Aucun money remote dans ReplicatedStorage.\nUtilise Deep Scan pour chercher partout.",
 })
 
 secScan:AddButton({
-    Name = "🔍  Scanner le système d'argent",
+    Name = "🔬  Deep Scan (tout le jeu)",
     Callback = function()
-        -- Leaderstats
         local v, name = findCashValue()
         local lsMsg = v
             and ("✅ leaderstats." .. name .. " = $" .. tostring(v.Value))
             or  ("❌ " .. name)
-
-        -- Remotes
-        local remotes = scanAllRemotes()
-        local remoteMsg
-        if #remotes == 0 then
-            remoteMsg = "❌ Aucun RemoteEvent dans ReplicatedStorage"
-        else
-            local names = {}
-            for _, r in ipairs(remotes) do table.insert(names, r.name) end
-            remoteMsg = "✅ " .. #remotes .. " remote(s) : " .. table.concat(names, ", ")
-        end
-
-        print("=== SCAN MONEY ===")
-        print(lsMsg)
-        print(remoteMsg)
-        for _, r in ipairs(remotes) do
-            print("  [" .. r.obj.ClassName .. "] " .. r.path)
-        end
-        print(string.rep("=", 30))
-
-        scanPara:Set({
-            Title   = "Résultat",
-            Content = lsMsg .. "\n" .. remoteMsg,
-        })
+        local found = deepScanRemotes()
+        local rMsg = #found > 0
+            and ("✅ " .. #found .. " money remote(s) trouvé(s)")
+            or  "❌ Aucun money remote → système 100% serveur"
+        print("=== DEEP SCAN ===")
+        print(lsMsg); print(rMsg)
+        for _, r in ipairs(found) do print("  [" .. r.obj.ClassName .. "] " .. r.path) end
+        print(("="):rep(32))
+        scanPara:Set({ Title = "Deep Scan", Content = lsMsg .. "\n" .. rMsg })
         SpaceUI:Notify({ Title = "Scan terminé", Content = lsMsg, Duration = 4 })
     end,
 })
 
-local secGive = tabMoney:AddSection("Give Money — Bronx Hood")
+secScan:AddButton({
+    Name = "🖨️  Print leaderstats (console F9)",
+    Callback = function()
+        local stats = LP:FindFirstChild("leaderstats")
+        print("=== LEADERSTATS ===")
+        if stats then
+            for _, v in ipairs(stats:GetChildren()) do
+                print(string.format("  %s [%s] = %s", v.Name, v.ClassName, tostring((v :: any).Value)))
+            end
+        else print("  Pas de leaderstats") end
+        print(("="):rep(20))
+        SpaceUI:Notify({ Title = "Leaderstats printées ✓", Duration = 2 })
+    end,
+})
+
+local secGive = tabMoney:AddSection("Give Money")
 
 secGive:AddSlider({
-    Name      = "Montant",
-    Min       = 100,
-    Max       = 999999,
-    Default   = 5000,
-    Suffix    = " $",
-    Increment = 100,
-    Flag      = "money_amount",
-    Callback  = function(v) moneyAmount = v end,
+    Name = "Montant", Min = 100, Max = 999999, Default = 5000,
+    Suffix = " $", Increment = 100, Flag = "money_amount",
+    Callback = function(v) moneyAmount = v end,
 })
 
 secGive:AddButton({
-    Name = "💰  Give Money",
+    Name = "💰  Give Money (leaderstats + deep scan)",
     Callback = function()
         local result = giveMoney(moneyAmount)
         SpaceUI:Notify({
-            Title   = "Give Money",
-            Content = "+" .. moneyAmount .. "$ envoyé\n" .. result:match("^[^\n]+"),
+            Title   = "+" .. moneyAmount .. "$",
+            Content = result:match("^[^\n]+"),
             Duration = 3,
         })
     end,
@@ -648,62 +682,49 @@ secGive:AddButton({
     Callback = function()
         local result = giveMoney(999999)
         SpaceUI:Notify({
-            Title   = "Max Cash",
-            Content = "+999 999$ envoyé\n" .. result:match("^[^\n]+"),
+            Title   = "+999 999$",
+            Content = result:match("^[^\n]+"),
             Duration = 3,
         })
     end,
 })
 
-secGive:AddButton({
-    Name = "🗑️  Reset Cash ($0)",
-    Callback = function()
-        local v = findCashValue()
+local secTurf = tabMoney:AddSection("Auto-Turf Farm 💸")
+
+secTurf:AddParagraph({
+    Title   = "Comment ça marche ?",
+    Content = "Fire TurfEvents.TurfCaptured en boucle.\nBronx Hood donne de l\'argent à chaque capture.",
+})
+
+secTurf:AddToggle({
+    Name = "Auto-Turf Farm (TurfCaptured loop)", Default = false, Flag = "turf_farm",
+    Callback = function(v)
         if v then
-            v.Value = 0
-            SpaceUI:Notify({ Title = "Reset Cash", Content = "leaderstats mis à 0", Duration = 2 })
+            local ok, msg = startTurfFarm()
+            SpaceUI:Notify({
+                Title   = ok and "Turf Farm ON 💸" or "Erreur",
+                Content = msg, Duration = 3,
+            })
         else
-            SpaceUI:Notify({ Title = "Erreur", Content = "leaderstats introuvable", Duration = 2 })
+            stopTurfFarm()
+            SpaceUI:Notify({ Title = "Turf Farm OFF", Duration = 2 })
         end
     end,
 })
 
-local secDebug = tabMoney:AddSection("Debug")
-
-secDebug:AddButton({
-    Name = "🖨️  Print tous les RemoteEvents (console)",
+secTurf:AddButton({
+    Name = "⚡  Fire TurfCaptured (×1 fois)",
     Callback = function()
-        local remotes = scanAllRemotes()
-        print("=== ALL REMOTES IN REPLICATEDSTORAGE ===")
-        for _, r in ipairs(remotes) do
-            print("  [" .. r.obj.ClassName .. "] " .. r.path)
-        end
-        print("Total : " .. #remotes)
-        print(string.rep("=", 40))
-        SpaceUI:Notify({
-            Title   = "Debug",
-            Content = #remotes .. " remote(s) printés dans la console",
-            Duration = 3,
-        })
-    end,
-})
-
-secDebug:AddButton({
-    Name = "🖨️  Print tous les leaderstats",
-    Callback = function()
-        local stats = LP:FindFirstChild("leaderstats")
-        print("=== LEADERSTATS ===")
-        if stats then
-            for _, v in ipairs(stats:GetChildren()) do
-                print("  " .. v.Name .. " [" .. v.ClassName .. "] = " .. tostring((v :: any).Value))
-            end
+        local ev = getTurfEvent("TurfCaptured")
+        if ev then
+            pcall(function() ev:FireServer() end)
+            SpaceUI:Notify({ Title = "TurfCaptured fired ✓", Duration = 2 })
         else
-            print("  Pas de leaderstats trouvé")
+            SpaceUI:Notify({ Title = "Erreur", Content = "TurfCaptured introuvable", Duration = 2 })
         end
-        print(string.rep("=", 20))
-        SpaceUI:Notify({ Title = "Leaderstats printées", Duration = 2 })
     end,
 })
+
 
 -- ── Config & Événements ───────────────────────────────────────────────────────
 Window:LoadConfig()
