@@ -565,150 +565,176 @@ secPlayers:AddButton({
     end,
 })
 
--- ── Money UI ─────────────────────────────────────────────────────────────────
+-- ── Money UI — Bronx Hood ───────────────────────────────────────────────────
 
--- Intercepteur : capture les vrais paramètres quand le serveur donne de l'argent
-local interceptorActive = false
-local lastCaptured      = nil
+-- Value Watcher — surveille TOUS les changements de valeurs du joueur
+local watchedValues = {}
+local foundMoneyPath = nil
 
-local function setupInterceptor()
-    if interceptorActive then return end
-    interceptorActive = true
-    local toHook = {"GiveMoney","ShowRewardMessage","GroupRewardMessage","UpdateDatastore","BankAction"}
-    for _, evName in ipairs(toHook) do
-        local ev = RS:FindFirstChild(evName)
-        if ev then
-            ev.OnClientEvent:Connect(function(...)
-                local args = {...}
-                print("=== INTERCEPTÉ: " .. evName .. " (server→client) ===")
-                for i, v in ipairs(args) do
-                    print(string.format("  [%d] %s = %s", i, type(v), tostring(v)))
-                end
-                -- Stocke les paramètres pour replay
-                if evName == "GiveMoney" or evName == "ShowRewardMessage" then
-                    lastCaptured = {name = evName, args = args}
+local function startValueWatcher()
+    local function watch(obj, path)
+        if watchedValues[obj] then return end
+        watchedValues[obj] = true
+        if obj:IsA("IntValue") or obj:IsA("NumberValue") then
+            local old = obj.Value
+            obj.Changed:Connect(function(new)
+                print(string.format("💰 VALEUR CHANGÉE: %s | %d → %d (delta: %+d)", path, old, new, new - old))
+                if new > old then
+                    foundMoneyPath = path
                     SpaceUI:Notify({
-                        Title   = "💰 Capturé: " .. evName,
-                        Content = #args .. " arg(s) capturé(s) — voir F9\nClique REPLAY pour rejouer !",
+                        Title   = "💰 Argent trouvé !",
+                        Content = path .. "\n" .. old .. " → " .. new .. " (+" .. (new-old) .. ")",
                         Duration = 6,
                     })
                 end
+                old = new
             end)
         end
+        for _, child in ipairs(obj:GetChildren()) do
+            watch(child, path .. "." .. child.Name)
+        end
+        obj.ChildAdded:Connect(function(child)
+            watch(child, path .. "." .. child.Name)
+        end)
     end
-    print("✅ Money interceptor actif — gagne 1x de l'argent normalement pour capturer les params")
+    watch(LP, "LocalPlayer")
+    print("✅ Value Watcher actif — gagne de l'argent pour révéler le chemin")
 end
 
-local secInfo = tabMoney:AddSection("ℹ️  Mode d'emploi")
+-- Remote Spy — intercepte tous les FireServer sortants (hookmetamethod)
+local remoteSpyActive = false
+local function startRemoteSpy()
+    local ok = pcall(function()
+        local old
+        old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local m = getnamecallmethod()
+            if remoteSpyActive and (m == "FireServer" or m == "InvokeServer") then
+                if self:IsA("RemoteEvent") or self:IsA("RemoteFunction") then
+                    local args = {...}
+                    local s = "🔴 " .. self:GetFullName() .. " (" .. m .. ")"
+                    for i, v in ipairs(args) do
+                        s = s .. string.format("\n  [%d] %s: %s", i, type(v), tostring(v))
+                    end
+                    print(s)
+                end
+            end
+            return old(self, ...)
+        end))
+    end)
+    if not ok then
+        print("⚠️ hookmetamethod indisponible — exécuteur non supporté (utilise KRNL/Synapse/Solara)")
+        return false
+    end
+    remoteSpyActive = true
+    print("✅ Remote Spy actif — fais une action pour voir les calls")
+    return true
+end
 
-secInfo:AddParagraph({
-    Title   = "Pourquoi ça ne marchait pas ?",
-    Content = "Le serveur valide qui peut appeler GiveMoney.\nStratégie : active l'intercepteur, gagne 1x de l'argent normalement dans le jeu, puis clique REPLAY pour rejouer les paramètres en boucle.",
+-- Modifier directement la valeur trouvée par le watcher
+local function setMoneyDirect(amount)
+    if not foundMoneyPath then return false, "Lance d'abord le Value Watcher + gagne 1x de l'argent" end
+    -- Navigue jusqu'à la valeur
+    local parts = {}
+    for part in foundMoneyPath:gmatch("[^.]+") do parts[#parts+1] = part end
+    local obj = game
+    for i = 2, #parts do  -- skip "LocalPlayer" → start from LP
+        obj = obj:FindFirstChild(parts[i]) or LP
+        if not obj then return false, "Chemin introuvable: " .. parts[i] end
+    end
+    if obj and (obj:IsA("IntValue") or obj:IsA("NumberValue")) then
+        local old = obj.Value
+        obj.Value = obj.Value + amount
+        return true, foundMoneyPath .. ": " .. old .. " → " .. obj.Value
+    end
+    return false, "Objet non modifiable"
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+
+local secStep1 = tabMoney:AddSection("Étape 1 — Surveiller les valeurs")
+
+secStep1:AddParagraph({
+    Title = "Comment ça marche",
+    Content = "1. Active le Value Watcher\n2. Gagne de l'argent UNE FOIS dans le jeu\n3. Le script trouve automatiquement où est stocké l'argent\n4. Utilise 'Give Direct' pour en ajouter",
 })
 
-local secIntercept = tabMoney:AddSection("1. Intercepteur (obligatoire)")
-
-secIntercept:AddButton({
-    Name = "🎣  Activer l'intercepteur",
+secStep1:AddButton({
+    Name = "👁  Activer Value Watcher",
     Callback = function()
-        setupInterceptor()
+        startValueWatcher()
         SpaceUI:Notify({
-            Title   = "Intercepteur actif ✓",
-            Content = "Va gagner de l'argent UNE FOIS normalement.\nLe script capturera les params automatiquement.",
+            Title   = "Value Watcher actif ✓",
+            Content = "Va gagner de l'argent normalement.\nLe script détectera la valeur automatiquement.",
             Duration = 5,
         })
     end,
 })
 
-secIntercept:AddButton({
-    Name = "🔁  REPLAY (rejoue les params capturés)",
+local secStep2 = tabMoney:AddSection("Étape 2 — Remote Spy (exécuteurs avancés)")
+
+secStep2:AddButton({
+    Name = "🔴  Activer Remote Spy (hookmetamethod)",
     Callback = function()
-        if not lastCaptured then
-            SpaceUI:Notify({ Title = "Rien capturé", Content = "Active l'intercepteur et gagne 1x de l'argent d'abord !", Duration = 3 })
-            return
-        end
-        local ev = RS:FindFirstChild(lastCaptured.name)
-        if not ev then
-            SpaceUI:Notify({ Title = "Event introuvable", Content = lastCaptured.name, Duration = 3 })
-            return
-        end
-        -- Replay 10 fois
-        for i = 1, 10 do
-            pcall(function() ev:FireServer(table.unpack(lastCaptured.args)) end)
-            task.wait(0.1)
-        end
+        local ok = startRemoteSpy()
         SpaceUI:Notify({
-            Title   = "Replay ×10 envoyé",
-            Content = lastCaptured.name .. " rejoué 10 fois",
-            Duration = 3,
+            Title   = ok and "Remote Spy actif 🔴" or "Non supporté ⚠️",
+            Content = ok
+                and "Fais une action qui donne de l'argent.\nVoir console F9."
+                or  "Ton exécuteur ne supporte pas hookmetamethod.",
+            Duration = 4,
         })
-        print("=== REPLAY: " .. lastCaptured.name .. " ===")
-        for i, v in ipairs(lastCaptured.args) do
-            print(string.format("  [%d] %s = %s", i, type(v), tostring(v)))
-        end
     end,
 })
 
-local secLoop = tabMoney:AddSection("2. Loop Replay automatique")
-local replayLooping = false
-local replayLoopConn = nil
-
-secLoop:AddToggle({
-    Name = "⚙️  Loop Replay (toutes les 0.5s)", Default = false, Flag = "replay_loop",
-    Callback = function(v)
-        replayLooping = v
-        if v then
-            if not lastCaptured then
-                replayLooping = false
-                SpaceUI:Notify({ Title = "Rien capturé !", Content = "Active l'intercepteur d'abord", Duration = 3 })
-                return
-            end
-            replayLoopConn = task.spawn(function()
-                while replayLooping do
-                    local ev = RS:FindFirstChild(lastCaptured.name)
-                    if ev then
-                        pcall(function() ev:FireServer(table.unpack(lastCaptured.args)) end)
-                    end
-                    task.wait(0.5)
-                end
-            end)
-            SpaceUI:Notify({ Title = "Loop ON 💸", Content = "Replay en boucle toutes les 0.5s", Duration = 3 })
-        else
-            if replayLoopConn then pcall(function() task.cancel(replayLoopConn) end); replayLoopConn = nil end
-            SpaceUI:Notify({ Title = "Loop OFF", Duration = 2 })
-        end
+secStep2:AddButton({
+    Name = "⏹  Désactiver Remote Spy",
+    Callback = function()
+        remoteSpyActive = false
+        SpaceUI:Notify({ Title = "Remote Spy OFF", Duration = 2 })
     end,
 })
 
-local secGive = tabMoney:AddSection("3. Give Direct (GiveMoney)")
+local secStep3 = tabMoney:AddSection("Étape 3 — Give Money")
 
-secGive:AddSlider({
+secStep3:AddSlider({
     Name = "Montant", Min = 100, Max = 999999, Default = 5000,
     Suffix = " $", Increment = 100, Flag = "money_amount",
     Callback = function(v) moneyAmount = v end,
 })
 
-secGive:AddButton({
-    Name = "💰  Fire GiveMoney directement",
+secStep3:AddButton({
+    Name = "💰  Give Direct (valeur détectée)",
     Callback = function()
-        local result = giveMoney(moneyAmount)
+        local ok, msg = setMoneyDirect(moneyAmount)
         SpaceUI:Notify({
-            Title   = "+" .. moneyAmount .. "$ tenté",
-            Content = result:match("^[^\n]+"),
-            Duration = 3,
+            Title   = ok and ("+" .. moneyAmount .. "$ ✅") or "Erreur ❌",
+            Content = msg, Duration = 3,
         })
     end,
 })
 
-secGive:AddButton({
-    Name = "💎  Max Cash ($999 999)",
+secStep3:AddButton({
+    Name = "💰  Fire GiveMoney (serveur)",
     Callback = function()
-        local result = giveMoney(999999)
-        SpaceUI:Notify({ Title = "+999 999$", Content = result:match("^[^\n]+"), Duration = 3 })
+        local result = giveMoney(moneyAmount)
+        SpaceUI:Notify({ Title = "+" .. moneyAmount .. "$", Content = result:match("^[^\n]+"), Duration = 3 })
     end,
 })
 
-local secTurf = tabMoney:AddSection("4. Auto-Turf Farm")
+secStep3:AddButton({
+    Name = "💎  Max Cash ($999 999)",
+    Callback = function()
+        local ok, msg = setMoneyDirect(999999)
+        if not ok then
+            local result = giveMoney(999999)
+            SpaceUI:Notify({ Title = "+999 999$", Content = result:match("^[^\n]+"), Duration = 3 })
+        else
+            SpaceUI:Notify({ Title = "+999 999$ ✅", Content = msg, Duration = 3 })
+        end
+    end,
+})
+
+local secTurf = tabMoney:AddSection("Auto-Turf Farm")
 
 secTurf:AddToggle({
     Name = "Auto-Turf Farm (TurfCaptured loop)", Default = false, Flag = "turf_farm",
@@ -731,7 +757,7 @@ secTurf:AddButton({
             pcall(function() ev:FireServer() end)
             SpaceUI:Notify({ Title = "TurfCaptured fired ✓", Duration = 2 })
         else
-            SpaceUI:Notify({ Title = "Erreur", Content = "TurfCaptured introuvable", Duration = 2 })
+            SpaceUI:Notify({ Title = "Introuvable", Content = "TurfCaptured", Duration = 2 })
         end
     end,
 })
